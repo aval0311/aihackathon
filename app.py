@@ -10,6 +10,31 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 PILOT_ZIPS = {"84101", "84102", "84103", "84104", "84105", "84106", "84108", "84111", "84112", "84116"}
 
 
+def parse_salary_entry(value):
+    """Accept plain digits or correctly grouped commas, with optional cents."""
+    text = value.strip().removeprefix("$").strip()
+    if not text:
+        return None
+    if not re.fullmatch(r"(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)(?:\.[0-9]{1,2})?", text):
+        raise ValueError("Enter a salary such as 100,000.")
+    amount = float(text.replace(",", ""))
+    if not 0 <= amount <= 10000000:
+        raise ValueError("Enter a salary between 0 and 10,000,000.")
+    return amount
+
+
+def format_salary_entry():
+    """Add thousands separators after the user finishes editing the field."""
+    try:
+        amount = parse_salary_entry(st.session_state.get("salary_entry", ""))
+    except ValueError:
+        return  # Show validation feedback when the user submits.
+    if amount is not None:
+        st.session_state["salary_entry"] = (
+            f"{amount:,.0f}" if amount.is_integer() else f"{amount:,.2f}"
+        )
+
+
 def load_snapshots():
     """Use reviewed local snapshots so the demo does not depend on live scraping."""
     snapshots = json.loads((DATA_DIR / "spending_snapshots.json").read_text(encoding="utf-8"))
@@ -66,18 +91,26 @@ def show_breakdown(level, snapshot, amount):
 st.title("Your Tax Dollar")
 st.write("Enter your salary and ZIP to see where your estimated tax dollars go, ranked from largest to smallest.")
 st.caption("Salt Lake City, Utah | Tax year 2026")
-st.info("Demo profile: You are married, own a home in Salt Lake City, and have one child under 17. You are the only earner.")
+st.info("You are married, own a home in Salt Lake City, and have one child under 17.")
 st.caption("Results show your estimated tax dollars. See assumptions and sources below.")
 
-with st.form("tax_inputs"):
-    salary = st.number_input("Your annual gross salary ($)", min_value=0, max_value=10000000, value=None, placeholder="Enter your salary", step=1000, help="Enter your individual salary before taxes. For this demo, your spouse has no additional income.")
+# Keep the two inputs together; format salary on blur without extra controls.
+with st.container():
+    salary_text = st.text_input("Your annual gross salary ($)", key="salary_entry", placeholder="Enter your salary", max_chars=20, on_change=format_salary_entry, help="Enter your individual salary before taxes, for example 100,000. For this demo, your spouse has no additional income.")
     zip_code = st.text_input("Residential ZIP code", max_chars=5, placeholder="Enter your ZIP code")
     st.caption("Enter just your salary and ZIP. The demo profile supplies the other assumptions.")
-    submitted = st.form_submit_button("Show where my tax dollars could go")
+    submitted = st.button("Show where my tax dollars could go")
 
 if submitted:
     error = None
-    if salary is None:
+    try:
+        salary = parse_salary_entry(salary_text)
+    except ValueError as exc:
+        salary = None
+        error = str(exc)
+    if error:
+        pass
+    elif salary is None:
         error = "Please enter your annual gross salary."
     elif not re.fullmatch(r"[0-9]{5}", zip_code.strip()):
         error = "Please enter a five-digit ZIP code."
