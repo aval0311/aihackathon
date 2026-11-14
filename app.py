@@ -1,12 +1,12 @@
 """Two-input individual tax story using a married, single-earner demo profile."""
-import json
 import re
-from pathlib import Path
+from html import escape
+from decimal import DecimalException
 import streamlit as st
-from tax_model import estimate_taxes, allocate_tax_dollars
+from tax_model import estimate_taxes
+from spending_data import load_spending_data, build_allocations
 
 st.set_page_config(page_title="Your Tax Dollar", page_icon="🪙", layout="centered")
-DATA_DIR = Path(__file__).resolve().parent / "data"
 PILOT_ZIPS = {"84101", "84102", "84103", "84104", "84105", "84106", "84108", "84111", "84112", "84116"}
 LEVEL_STYLE = {
     "Federal": {"icon": "🏛️", "color": "#087F8C", "place": "United States"},
@@ -26,6 +26,19 @@ st.markdown("""
 .tax-summary-label {font-size:1rem;font-weight:700;}
 .tax-summary-amount {font-size:clamp(1.5rem,4vw,2rem);font-weight:750;line-height:1.6;font-variant-numeric:tabular-nums;}
 .tax-summary-note {font-size:.8rem;color:#526078;}
+.tax-tree {margin:1rem 0;}
+.tax-node {border:1px solid #DCE5E4;border-radius:12px;margin:.6rem 0;background:#FFFFFF;color:#172B4D;}
+.tax-node summary {display:flex;gap:.65rem;align-items:center;cursor:pointer;padding:1rem;font-weight:650;list-style:none;}
+.tax-node summary::-webkit-details-marker {display:none;}
+.tax-node summary::before {content:'+';font-size:1.3rem;font-weight:750;color:#087F8C;flex-shrink:0;}
+.tax-node[open]>summary::before {content:'-';}
+.tax-node summary:focus-visible {outline:3px solid #087F8C;outline-offset:2px;border-radius:10px;}
+.tax-node-amount {margin-left:auto;white-space:nowrap;font-size:.9rem;font-weight:700;font-variant-numeric:tabular-nums;}
+.tax-node-content {padding:0 1rem 1rem;}
+.tax-leaf {display:flex;gap:.75rem;padding:.75rem .25rem;border-bottom:1px solid #EDF1EF;}
+.tax-leaf>span:first-child {overflow-wrap:anywhere;}
+.tax-node-context,.tax-metric-context {font-size:.8rem;color:#526078;margin:.5rem 0;}
+@media(max-width:480px) {.tax-node summary,.tax-leaf {flex-wrap:wrap;}.tax-node-amount {margin-left:1.3rem;}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -80,57 +93,97 @@ def format_salary_entry():
         )
 
 
-def load_snapshots():
-    """Use reviewed local snapshots so the demo does not depend on live scraping."""
-    snapshots = json.loads((DATA_DIR / "spending_snapshots.json").read_text(encoding="utf-8"))
-    for snapshot in snapshots.values():
-        rows = snapshot["rows"]
-        total = sum(row["weight"] for row in rows)
-        if (not rows or total <= 0 or any(row["weight"] < 0 for row in rows)
-                or len({row["category"] for row in rows}) != len(rows)
-                or abs(total - snapshot["published_weight_total"]) > snapshot["rounding_tolerance"]):
-            raise ValueError("Source totals could not be verified.")
-    return snapshots
+def render_allocation_details(pool, broad, amounts, groups):
+    """Native HTML disclosures allow accessible nested '+' drilldowns."""
+    nodes = pool["nodes"]
+
+    def money_label(value):
+        return f'<span class="tax-node-amount">${value:,.2f} / year</span>'
+
+    def render_node(row):
+        key = row["node_id"]
+        children = [nodes[child] for child in pool["children"].get(key, [])]
+        spending = sorted((child for child in children if child["allocation_status"] == "spending"),
+                          key=lambda child: (amounts[child["node_id"]], child["share"]), reverse=True)
+        metrics = [child for child in children if child["allocation_status"] == "metric"]
+        label = escape(row["plain_english_name"])
+        value = money_label(amounts[key])
+        description = row.get("plain_english_description", "")
+        context = f'<p class="tax-node-context">{escape(description)}</p>' if description else ""
+        if not spending and not metrics:
+            return f'<div class="tax-leaf"><span>{label}</span>{value}</div>' + context
+        content = context + "".join(render_node(child) for child in spending)
+        if metrics:
+            content += '<p class="tax-node-context">Service context (not additional spending)</p>'
+            for metric in metrics:
+                number = float(metric["metric_value"])
+                formatted = f"{number:,.0f}" if number.is_integer() else f"{number:,.2f}"
+                content += (f'<div class="tax-metric-context">{escape(metric["plain_english_name"])}: '
+                            f'<strong>{formatted} {escape(metric["metric_unit"])}</strong></div>')
+        return (f'<details class="tax-node"><summary><span>{label}</span>{value}</summary>'
+                f'<div class="tax-node-content">{content}</div></details>')
+
+    html = '<div class="tax-tree">'
+    for category in broad:
+        name = category["Category"]
+        members = sorted(groups[name], key=lambda row: (amounts[row["node_id"]], row["share"]), reverse=True)
+        html += (f'<details class="tax-node tax-broad"><summary><span>{escape(name)}</span>'
+                 f'{money_label(category["Your allocation (USD)"])}</summary><div class="tax-node-content">'
+                 + "".join(render_node(row) for row in members) + '</div></details>')
+    return html + '</div>'
 
 
-def show_breakdown(level, snapshot, amount):
-    """Lead with personal dollar allocations, then provide source context."""
-    local = level in ("County", "City")
+def show_breakdown(level, pool, amount):
+    """Show broad purposes first; '+' disclosures reveal named CSV sublevels."""
     style = LEVEL_STYLE[level]
-    label = "Your illustrative property-tax allocation" if local else "Your estimated income-tax allocation"
-    st.subheader(f"{style['icon']} {snapshot['jurisdiction']}")
-    st.caption(f"{label} | {snapshot['period']}")
-    allocations = allocate_tax_dollars(snapshot["rows"], amount)
+    root = pool["root"]
+    st.subheader(f"{style['icon']} {root['entity']}")
+    period = "FY2025 actual spending" if level == "Federal" else "FY2026 spending data"
+    label = "Property-tax scenario" if level in ("County", "City") else "Estimated income-tax allocation"
+    st.caption(f"{label} | {period}")
+    if level == "County":
+        st.warning("Broad county spending illustration: this CSV redistributes shared costs and does not separately identify public safety. It also includes library and fee-funded services outside our modeled county levy. These shares do not trace your property-tax payments.")
+    elif level == "State":
+        st.caption("Uses Utah's all-source spending mix, including federal funding, as an illustration of your estimated state taxes.")
+    elif level == "Federal":
+        st.caption("The CSV spreads interest and general government costs across services; those costs are included in the program shares below.")
+    else:
+        st.caption("The CSV distributes shared and non-departmental costs across city departments. These are modeled service allocations.")
+    allocations, amounts, groups = build_allocations(pool, amount)
     with st.container(border=True):
         if amount > 0:
             top = allocations[0]
             st.caption(f"YOUR LARGEST {level.upper()} ALLOCATION")
             st.subheader(top["Category"])
-            st.write(f"About **${top['Your allocation (USD)']:,.2f} per year** of your estimated {level.lower()} taxes supports this category — **{top['Share (%)']:.1f}%** of this breakdown.")
+            st.write(f"About **${top['Your allocation (USD)']:,.2f} per year** of your estimated {level.lower()} taxes is allocated here in this illustration (**{top['Share (%)']:.1f}%**).")
         else:
             st.write("Your estimated tax is $0 at this level. Each allocation below is $0.")
     st.markdown("#### Follow your dollars")
-    st.caption("Largest to smallest · Hover over a bar for more detail.")
-    st.vega_lite_chart(
-        allocations,
-        allocation_chart_spec(allocations, style["color"]),
-        height=max(240, len(allocations) * 38),
-        use_container_width=True,
-        theme=None,
-    )
-    with st.expander("See every allocation in a table"):
-        st.dataframe(
-            allocations, hide_index=True, use_container_width=True,
-            column_config={"Your allocation (USD)": st.column_config.NumberColumn(format="$%.2f"), "Share (%)": st.column_config.NumberColumn(format="%.2f%%")},
-        )
-        st.caption("Allocations add up to your displayed tax amount, including rounding.")
-    with st.expander("Budget source and how this breakdown works"):
-        st.markdown(f"[Official spending source]({snapshot['source_url']}) — {snapshot['source_location']}.")
-        st.write("Allocation = tax amount multiplied by each category's share of this spending snapshot. These are proportional illustrations, not a trace of your individual payments.")
-        st.write(snapshot["scope"])
-        st.write(snapshot["notes"])
-        st.caption(f"Underlying source weights are in {snapshot['weight_unit']}.")
-        st.dataframe(snapshot["rows"], hide_index=True, use_container_width=True)
+    st.caption("Largest to smallest. Dollar amounts are annual estimates.")
+    st.vega_lite_chart(allocations, allocation_chart_spec(allocations, style["color"]),
+                       height=max(240, len(allocations) * 38), use_container_width=True, theme=None)
+    st.markdown("#### Explore the categories")
+    st.caption("Select + to see named subcategories. Select + again where more detail is available. Subcategories are parts of their parent amount, not additional taxes.")
+    st.markdown(render_allocation_details(pool, allocations, amounts, groups), unsafe_allow_html=True)
+    with st.expander("See every broad allocation in a table"):
+        st.dataframe(allocations, hide_index=True, use_container_width=True,
+                     column_config={"Your allocation (USD)": st.column_config.NumberColumn(format="$%.2f"),
+                                    "Share (%)": st.column_config.NumberColumn(format="%.2f%%")})
+        st.caption("Broad categories add up to your displayed tax estimate. Each expanded spending branch adds up to its parent, including rounding.")
+    with st.expander("Dataset, sources and allocation assumptions"):
+        st.markdown("[View the allocation CSV](https://github.com/aval0311/aihackathon/blob/main/data/tax-explorer/tax_explorer_prototype_v3_reconciled.csv)")
+        st.write("Your individual tax estimate is distributed using this CSV's normalized spending shares. Broad purposes group the first-level records by citizen category. Shared costs and interest retain the CSV's attribution method. These figures illustrate spending patterns; they do not track actual payments or personal benefits.")
+        st.write(root["notes"])
+        if level == "County":
+            st.caption("The county source URL supplied in the CSV could not be verified during review. It is preserved in the source table below.")
+        st.caption("Official amounts are published spending figures. Attributed amounts include the dataset's modeled redistribution; they are not official department budgets. Staffing and service metrics never enter money totals.")
+        details = [{"Category": row["plain_english_name"], "Level": row["depth"],
+                    "Official spending (USD)": float(row["official_amount_usd"] or 0),
+                    "Modeled attributed spending (USD)": float(row["attributed_spending_usd"]),
+                    "Method": row["allocation_method"], "Source": row["source_url"],
+                    "Page": row.get("source_page", ""), "Notes": row["notes"]}
+                   for row in pool["nodes"].values() if row["allocation_status"] == "spending"]
+        st.dataframe(details, hide_index=True, use_container_width=True)
 
 
 def submit_profile():
@@ -185,7 +238,7 @@ def show_assumptions():
         st.markdown("[Census home-value data](https://www.census.gov/quickfacts/fact/table/saltlakecitycityutah/EDU635224) | [ACS full-time worker earnings reported by Neilsberg](https://www.neilsberg.com/insights/topic/salt-lake-city-ut/)")
         st.write("Taxable home value is 55% of the scenario home value. City scenario uses the approved 2026 Salt Lake City general operations rate of 0.002374 only. County scenario uses the sum of approved countywide rates, 0.001349, excluding the separate library levy. Neither represents the complete property-tax bill.")
         st.markdown("[Utah Tax Commission approved 2026 levy rates](https://tax.utah.gov/propertytax/rates/approved-rates/)")
-        st.write("Tax rules are for 2026. Federal spending uses FY2025 actual outlays; state uses FY2026-27 appropriations; city uses a verified FY2025-26 adopted snapshot; county uses a 2026 budget snapshot. Years and scopes are labeled in each panel. Transfers are not reallocated twice. This is not a comprehensive tax bill or a tax-return calculation.")
+        st.write("Tax rules are for 2026. The canonical allocation CSV uses FY2025 federal spending and FY2026 state and local data. State and county shares are all-source approximations, including grants, fees and potentially internal transfers. Federal interest and shared costs are redistributed as documented in the CSV. The county library spending scope differs from our levy estimate, and county public safety is not separately identified. We do not add government spending totals together. School-district data is not used. These are proportional illustrations, not a comprehensive tax bill or a tax-return calculation.")
 
     st.caption("Educational prototype. Inputs stay in this app session; this code does not store them in a database or send them to an AI service.")
 
@@ -219,14 +272,14 @@ if st.session_state.get("view", "inputs") == "results" and profile:
     st.markdown("### Explore your impact")
     st.write("Choose a government level to follow your dollars.")
     try:
-        snapshots = load_snapshots()
-    except (OSError, ValueError, KeyError, TypeError):
-        st.error("A reviewed spending snapshot could not be loaded or verified.")
+        pools = load_spending_data()
+    except (OSError, ValueError, KeyError, TypeError, DecimalException):
+        st.error("The allocation CSV could not be loaded or verified. Please check its columns and spending totals.")
     else:
         levels = ["Federal", "State", "County", "City"]
         for level, tab in zip(levels, st.tabs(levels)):
             with tab:
-                show_breakdown(level, snapshots[level], taxes[level])
+                show_breakdown(level, pools[level], taxes[level])
     show_assumptions()
 else:
     st.markdown('<p class="tax-eyebrow">🪙 A little clarity. A closer community.</p>', unsafe_allow_html=True)
