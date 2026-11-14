@@ -1,325 +1,134 @@
-# Create the Streamlit application file.
+"""Two-input, four-level tax story for the Draper hackathon pilot."""
 import csv
 import json
 import re
-from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 import streamlit as st
+from tax_model import estimate_taxes, allocate_tax_dollars
 
-# Configure the page; use the default icon to avoid encoding issues.
-st.set_page_config(
-    page_title="Your Tax Dollar",
-    layout="centered",
-)
-
-# Resolve data relative to this script, including on Streamlit Cloud.
-CITY = "Draper"
-COUNTY = "Salt Lake and Utah counties"
-STATE = "Utah"
+st.set_page_config(page_title="Your Tax Dollar", layout="centered")
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
-def load_city_budget():
-    """Load the reviewed snapshot and check it against its source total."""
-    metadata = json.loads(
-        (DATA_DIR / "draper_general_fund_fy2027_metadata.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    with (DATA_DIR / metadata["dataset_file"]).open(
-        encoding="utf-8", newline=""
-    ) as source_file:
-        rows = list(csv.DictReader(source_file))
-    amounts = [int(row["amount_usd"]) for row in rows]
-    total = sum(amounts)
-    if (
-        not rows
-        or any(amount < 0 for amount in amounts)
-        or total <= 0
-        or total != metadata["published_total_usd"]
-        or len({row["category"] for row in rows}) != len(rows)
-    ):
-        raise ValueError("Budget data does not match its published total.")
-    spending = [
-        {
-            "Category": row["category"],
-            "Budget (USD)": amount,
-            "Share (%)": amount / total * 100,
-        }
-        for row, amount in zip(rows, amounts)
-    ]
-    return sorted(spending, key=lambda row: row["Budget (USD)"], reverse=True), metadata
+def load_snapshots():
+    """Use reviewed local snapshots so the demo does not depend on live scraping."""
+    snapshots = json.loads((DATA_DIR / "spending_snapshots.json").read_text(encoding="utf-8"))
+    city_meta = json.loads((DATA_DIR / "draper_general_fund_fy2027_metadata.json").read_text(encoding="utf-8"))
+    with (DATA_DIR / city_meta["dataset_file"]).open(encoding="utf-8", newline="") as handle:
+        city_rows = [{"category": row["category"], "weight": int(row["amount_usd"])} for row in csv.DictReader(handle)]
+    snapshots["City"] = {
+        "jurisdiction": "Draper City",
+        "period": "FY2026-27, August 2026 adoption snapshot",
+        "scope": "General Fund expenditure and transfers",
+        "source_url": city_meta["source_url"],
+        "source_location": "PDF page 12, FY2027 column",
+        "weight_unit": "USD",
+        "published_weight_total": city_meta["published_total_usd"],
+        "rounding_tolerance": 0,
+        "notes": "General Fund only, not all city funds. Later amendments are not incorporated. Transfers are counted once. Tax payments are illustrated using the overall fund spending mix, including spending supported by other revenues.",
+        "rows": city_rows,
+    }
+    for snapshot in snapshots.values():
+        rows = snapshot["rows"]
+        total = sum(row["weight"] for row in rows)
+        if (not rows or total <= 0 or any(row["weight"] < 0 for row in rows)
+                or len({row["category"] for row in rows}) != len(rows)
+                or abs(total - snapshot["published_weight_total"]) > snapshot["rounding_tolerance"]):
+            raise ValueError("Source totals could not be verified.")
+    return snapshots
 
 
-def allocate_tax_dollars(spending, annual_tax):
-    """Allocate a tax amount using spending shares and reconcile every cent."""
-    amount = Decimal(str(annual_tax))
-    if not amount.is_finite() or amount < 0:
-        raise ValueError("Tax contribution must be a nonnegative amount.")
-    cents = int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-    total = sum(row["Budget (USD)"] for row in spending)
-    # Allocate whole cents first, then distribute leftover cents fairly.
-    parts = [divmod(cents * row["Budget (USD)"], total) for row in spending]
-    allocated = [part[0] for part in parts]
-    remainder_order = sorted(
-        range(len(parts)), key=lambda index: parts[index][1], reverse=True
-    )
-    for index in remainder_order[:cents - sum(allocated)]:
-        allocated[index] += 1
-    rows = [
-        {
-            "Category": row["Category"],
-            "Your tax allocation (USD)": value / 100,
-            "Share (%)": row["Share (%)"],
-        }
-        for row, value in zip(spending, allocated)
-    ]
-    return sorted(
-        rows,
-        key=lambda row: (row["Your tax allocation (USD)"], row["Share (%)"]),
-        reverse=True,
-    )
-
-
-def show_city_budget(annual_city_tax):
-    """Tell the citizen's tax story using the city's reviewed spending shares."""
-    try:
-        spending, metadata = load_city_budget()
-    except (OSError, ValueError, KeyError, TypeError):
-        st.error("City budget data could not be loaded or verified.")
-        return
-
-    st.subheader("Where your Draper city tax dollars could go")
-    st.caption(
-        f"FY {metadata['fiscal_year']} | August 2026 adoption snapshot | "
-        "Budgeted amounts, including transfers"
-    )
-    if annual_city_tax is None:
-        st.info(
-            "Enter your annual Draper city property tax amount in the form "
-            "above and submit again to see your dollar breakdown. Use only "
-            "the Draper City portion, not your entire property tax bill."
-        )
+def show_breakdown(level, snapshot, amount):
+    """Lead with personal dollar allocations, then provide source context."""
+    local = level in ("County", "City")
+    label = "Hypothetical homeowner allocation" if local else "Illustrative income-tax allocation"
+    st.subheader(f"{snapshot['jurisdiction']}: where the dollars could go")
+    st.caption(f"{label} | {snapshot['period']}")
+    st.metric("Annual scenario tax" if local else "Estimated annual income tax", f"${amount:,.2f}")
+    allocations = allocate_tax_dollars(snapshot["rows"], amount)
+    if amount > 0:
+        top = allocations[0]
+        st.write(f"The largest share supports **{top['Category']}**: **${top['Your allocation (USD)']:,.2f} per year** ({top['Share (%)']:.2f}%).")
     else:
-        allocations = allocate_tax_dollars(spending, annual_city_tax)
-        st.metric("City tax amount you entered", f"${annual_city_tax:,.2f}")
-        if annual_city_tax > 0:
-            top = allocations[0]
-            st.write(
-                f"Your largest illustrative allocation is **{top['Category']}**: "
-                f"**${top['Your tax allocation (USD)']:,.2f} per year** "
-                f"({top['Share (%)']:.2f}% of the amount you entered)."
-            )
-        else:
-            st.write("You entered zero city tax, so every allocation is zero.")
-        st.caption("Illustrative annual allocations, ordered largest to smallest.")
-        # Set the chart's category order explicitly so it matches the table.
-        st.vega_lite_chart(
-            allocations,
-            {
-                "mark": "bar",
-                "encoding": {
-                    "y": {
-                        "field": "Category", "type": "nominal",
-                        "sort": [row["Category"] for row in allocations],
-                        "axis": {"labelLimit": 220},
-                    },
-                    "x": {
-                        "field": "Your tax allocation (USD)",
-                        "type": "quantitative",
-                        "title": "Your illustrative allocation per year (USD)",
-                        "axis": {"format": "$,.2f"},
-                    },
-                    "tooltip": [
-                        {"field": "Category", "type": "nominal"},
-                        {"field": "Your tax allocation (USD)",
-                         "type": "quantitative", "format": "$,.2f"},
-                    ],
-                },
+        st.write("This model returns zero tax for this level, so all allocations are zero.")
+    st.vega_lite_chart(
+        allocations,
+        {
+            "mark": "bar",
+            "encoding": {
+                "y": {"field": "Category", "type": "nominal", "sort": [row["Category"] for row in allocations], "axis": {"labelLimit": 200}},
+                "x": {"field": "Your allocation (USD)", "type": "quantitative", "title": "Illustrative annual dollars (USD)", "axis": {"format": "$,.2f"}},
+                "tooltip": [{"field": "Category", "type": "nominal"}, {"field": "Your allocation (USD)", "type": "quantitative", "format": "$,.2f"}],
             },
-            height=480,
-            use_container_width=True,
-        )
-        st.dataframe(
-            allocations,
-            hide_index=True,
-            use_container_width=True,
-            column_config={
-                "Your tax allocation (USD)": st.column_config.NumberColumn(
-                    format="$%.2f"
-                ),
-                "Share (%)": st.column_config.NumberColumn(format="%.2f%%"),
-            },
-        )
-        st.caption(
-            "Allocations add up to the city tax amount you entered. "
-            "Rounding is reconciled to the nearest cent."
-        )
-    st.markdown(
-        f"[Official budget presentation]({metadata['source_url']}) "
-        f"- PDF page {metadata['source_pdf_page']}, FY2027 column."
+        },
+        height=max(240, len(allocations) * 32),
+        use_container_width=True,
     )
-    st.info(
-        "Illustrative allocation = your entered city tax amount multiplied by "
-        "each category's share of the General Fund budget. This assumes those "
-        "tax dollars follow the fund's overall spending mix; it is not an "
-        "exact trace of your payments. Other revenues also support this fund."
+    st.dataframe(
+        allocations, hide_index=True, use_container_width=True,
+        column_config={"Your allocation (USD)": st.column_config.NumberColumn(format="$%.2f"), "Share (%)": st.column_config.NumberColumn(format="%.2f%%")},
     )
-    with st.expander("View the underlying city budget"):
-        st.metric("General Fund budget", f"${metadata['published_total_usd']:,.0f}")
-        st.dataframe(spending, hide_index=True, use_container_width=True)
-    with st.expander("About this city dataset"):
-        for limitation in metadata["limitations"]:
-            st.write(f"- {limitation}")
+    st.caption("Largest to smallest. Allocations reconcile to the displayed tax amount, including rounding.")
+    st.markdown(f"[Official spending source]({snapshot['source_url']}) - {snapshot['source_location']}.")
+    with st.expander("How this breakdown works"):
+        st.write("Allocation = tax amount multiplied by each category's share of this spending snapshot. These are proportional illustrations, not a trace of your individual payments.")
+        st.write(snapshot["scope"])
+        st.write(snapshot["notes"])
+        st.caption(f"Underlying source weights are in {snapshot['weight_unit']}.")
+        st.dataframe(snapshot["rows"], hide_index=True, use_container_width=True)
 
-# Display the app introduction and development status.
+
 st.title("Your Tax Dollar")
-st.write(
-    "See an illustrative dollar-by-dollar breakdown of the public services "
-    "your taxes support, from the largest allocation to the smallest."
-)
-st.info(
-    "Draper's official city budget is connected. Tax calculations, "
-    "other government budgets, and Gemini explanations are still in development."
-)
+st.write("Enter your salary and ZIP to explore the public services your tax dollars could support, ranked from largest to smallest.")
+st.caption("Draper / Salt Lake County pilot | ZIP 84020 | Tax year 2026")
+st.info("Federal and state panels estimate income tax. City and county panels are hypothetical homeowner scenarios: a home worth 3 times salary, taxed at published local rates. They are not estimates of your actual property taxes.")
 
-# Use plain-text separators to avoid corrupted display characters.
-st.caption(f"Pilot location: {CITY} | {COUNTY} | {STATE}")
-st.caption(
-    "This pilot shows Draper's budget for every ZIP entered. "
-    "ZIP codes are not yet matched to city or county boundaries."
-)
-
-# Collect inputs together; process them only when the user submits.
 with st.form("tax_inputs"):
-    salary = st.number_input(
-        "Annual gross salary ($)",
-        min_value=0,
-        value=None,
-        placeholder="Enter your salary",
-        step=1000,
-        help="Your annual wages before taxes and deductions.",
-    )
+    salary = st.number_input("Annual gross salary ($)", min_value=0, max_value=10000000, value=None, placeholder="Enter your salary", step=1000)
+    zip_code = st.text_input("Residential ZIP code", max_chars=5, placeholder="Enter your ZIP code")
+    st.caption("Assumes a single adult under 65, wage income only, standard deduction, no dependents or pre-tax deductions. Federal payroll taxes and most credits are excluded. This pilot uses a Salt Lake County scenario, not a precise ZIP-to-boundary lookup.")
+    submitted = st.form_submit_button("Show where my tax dollars could go")
 
-    # Keep ZIP codes as text to preserve any leading zeros.
-    zip_code = st.text_input(
-        "Residential ZIP code",
-        max_chars=5,
-        placeholder="Enter five digits",
-    )
-
-    st.caption(
-        "Planned estimate: single filer, standard deduction, "
-        "wage income only, no dependents or additional credits."
-    )
-
-    # Local property taxes cannot be derived from annual salary.
-    annual_city_tax = st.number_input(
-        "Annual property tax paid to Draper City ($), optional",
-        min_value=0.0,
-        value=None,
-        step=50.0,
-        format="%.2f",
-        help=(
-            "Enter only the Draper City general operating tax line from your "
-            "property tax bill. Exclude county, school, and special district "
-            "amounts. Leave blank if unknown."
-        ),
-    )
-    st.caption(
-        "City dollar allocations use this entered amount, not salary. "
-        "For a demonstration, you may enter 1000 as an example contribution."
-    )
-
-    submitted = st.form_submit_button("Explore my tax picture")
-
-# Validate ZIP format before storing the submitted inputs.
 if submitted:
+    error = None
     if salary is None:
-        st.session_state.pop("profile", None)
-        st.error("Please enter your annual gross salary.")
+        error = "Please enter your annual gross salary."
     elif not re.fullmatch(r"[0-9]{5}", zip_code.strip()):
-        # Clear old results so they do not appear under a new error.
+        error = "Please enter a five-digit ZIP code."
+    elif zip_code.strip() != "84020":
+        error = "This hackathon pilot supports Draper ZIP 84020 only. Other locations are not implemented."
+    if error:
         st.session_state.pop("profile", None)
-        st.error("Please enter a five-digit ZIP code.")
+        st.error(error)
     else:
-        st.session_state["profile"] = {
-            "salary": salary,
-            "zip_code": zip_code.strip(),
-            "annual_city_tax": annual_city_tax,
-        }
+        st.session_state["profile"] = {"salary": salary, "zip_code": zip_code.strip()}
 
-# Keep valid results available during Streamlit page reruns.
 profile = st.session_state.get("profile")
-
 if profile:
-    # Show the submitted inputs used for the displayed results.
-    st.subheader("Your tax picture")
-    st.write(
-        f"Annual salary: **${profile['salary']:,.0f}** | "
-        f"ZIP code: **{profile['zip_code']}**"
-    )
-    st.caption(
-        "ZIP format checked only. The City tab shows the Draper pilot budget; "
-        "your ZIP has not been verified as a Draper address."
-    )
+    taxes = estimate_taxes(profile["salary"])
+    st.subheader("Your annual tax story")
+    st.write(f"Salary: **${profile['salary']:,.0f}** | ZIP: **{profile['zip_code']}**")
+    columns = st.columns(2)
+    for index, level in enumerate(["Federal", "State", "County", "City"]):
+        columns[index % 2].metric(f"{level} homeowner scenario" if level in ("County", "City") else f"{level} income tax estimate", f"${taxes[level]:,.2f}")
+    st.warning(f"Local scenario only: assumes a primary residence worth ${taxes['assumed_home_value']:,.0f} (3 times salary), with 55% taxable value. This is a project assumption, not an inferred home value. Excludes library, school and special district levies, sales taxes, exemptions beyond the standard primary-residence exemption, and renter circumstances.")
+    try:
+        snapshots = load_snapshots()
+    except (OSError, ValueError, KeyError, TypeError):
+        st.error("A reviewed spending snapshot could not be loaded or verified.")
+    else:
+        levels = ["Federal", "State", "County", "City"]
+        for level, tab in zip(levels, st.tabs(levels)):
+            with tab:
+                show_breakdown(level, snapshots[level], taxes[level])
 
-    # Reserve space for calculated taxes without inventing estimates.
-    federal, state = st.columns(2)
-    federal.metric("Estimated federal income tax", "Not calculated")
-    state.metric("Estimated state income tax", "Not calculated")
-    st.caption("Federal and state calculators are not implemented; these are not loading indicators.")
+with st.expander("Tax rules, assumptions, and sources"):
+    st.write("Federal: 2026 single-filer progressive brackets and a $16,100 standard deduction. No additional credits, adjustments, other income, payroll taxes, or alternative minimum tax are modeled.")
+    st.markdown("[IRS 2026 brackets and standard deduction](https://www.irs.gov/newsroom/working-families-tax-cuts-individuals-and-workers)")
+    st.write("Utah: assumes wages equal state taxable income; 4.45% rate, less the nonrefundable taxpayer tax credit: 6% of the $16,100 standard deduction, reduced by 1.3% of income above $18,696. Other state credits and exemptions are excluded.")
+    st.markdown("[Utah income-tax rate](https://le.utah.gov/xcode/Title59/Chapter10/C59-10-S104_2026050620260506.html) | [Utah taxpayer credit, 2026 review](https://le.utah.gov/interim/2026/pdf/00003360.pdf)")
+    st.write("Local: hypothetical home value = 3 times salary (a project assumption). Taxable home value = 55% of that value. City scenario = taxable value times 0.001128; countywide scenario = taxable value times 0.001509. The ZIP selects the fixed pilot; it does not establish parcel location or home ownership.")
+    st.markdown("[Draper adopted-budget presentation, page 4](https://www.utah.gov/pmn/files/1477201.pdf) | [Salt Lake County budget and tax example, printed pages 10-11](https://www.saltlakecounty.gov/globalassets/1-site-files/mayor-finance/budget/budget-documents/2026/supplemental/4.5---2026-adopted-budget-in-brief-12-9-2025.pdf?v=2)")
+    st.write("Tax rules are for 2026; spending snapshots span FY2025 federal actual outlays and FY2026/27 local/state budgets. Years and scopes are labeled in each panel. Transfers are not reallocated a second time. This is not a comprehensive tax bill or a tax-return calculation.")
 
-    # Create one spending tab for each government level.
-    st.subheader("Where your tax dollars could go")
-    levels = ["Federal", "State", "County", "City"]
-    tabs = st.tabs(levels)
-
-    for level, tab in zip(levels, tabs):
-        with tab:
-            st.write(f"**{level} tax dollar breakdown**")
-            if level == "City":
-                show_city_budget(profile.get("annual_city_tax"))
-            else:
-                st.info(
-                    "This breakdown is not implemented yet. Once the tax "
-                    "amount and reviewed spending data are connected, "
-                    "your dollar allocations will appear largest to smallest."
-                )
-
-            if level in ["County", "City"]:
-                st.caption(
-                    "Salary alone does not determine property "
-                    "or sales taxes."
-                )
-
-    # Enable this after verified data and Gemini are connected.
-    st.button(
-        "Explain these budgets with Gemini",
-        disabled=True,
-        help="Available after verified budget data is connected.",
-    )
-
-# Keep source information and methodology accessible.
-with st.expander("Sources and assumptions"):
-    st.markdown(
-        "City: [Draper FY2027 Final Budget Adoption]"
-        "(https://www.utah.gov/pmn/files/1477201.pdf), PDF page 12. "
-        "General Fund, August 18, 2026 snapshot; later amendments not included."
-    )
-    st.write(
-        "Federal, state, and county sources and tax calculation rules "
-        "are pending. The City tab allocates only the city tax amount "
-        "you enter, using General Fund spending shares."
-    )
-    st.write(
-        "Spending allocations will be illustrative estimates, "
-        "not a trace of individual tax payments."
-    )
-
-# Explain how this initial shell handles submitted inputs.
-st.caption(
-    "Educational prototype. Inputs are held in this app "
-    "session; this shell does not save them to a database or send "
-    "them to an AI service."
-)
+st.caption("Educational prototype. Inputs stay in this app session; this code does not store them in a database or send them to an AI service.")
