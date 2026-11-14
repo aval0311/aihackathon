@@ -88,48 +88,74 @@ def show_breakdown(level, snapshot, amount):
         st.dataframe(snapshot["rows"], hide_index=True, use_container_width=True)
 
 
-st.title("Your Tax Dollar")
-st.write("Enter your salary and ZIP to see where your estimated tax dollars go, ranked from largest to smallest.")
-st.caption("Salt Lake City, Utah | Tax year 2026")
-st.info("You are married, own a home in Salt Lake City, and have one child under 17.")
-st.caption("Results show your estimated tax dollars. See assumptions and sources below.")
-
-# Keep the two inputs together; format salary on blur without extra controls.
-with st.container():
-    salary_text = st.text_input("Your annual gross salary ($)", key="salary_entry", placeholder="Enter your salary", max_chars=20, on_change=format_salary_entry, help="Enter your individual salary before taxes, for example 100,000. For this demo, your spouse has no additional income.")
-    zip_code = st.text_input("Residential ZIP code", max_chars=5, placeholder="Enter your ZIP code")
-    st.caption("Enter just your salary and ZIP. The demo profile supplies the other assumptions.")
-    submitted = st.button("Show where my tax dollars could go")
-
-if submitted:
+def submit_profile():
+    """Validate both entries before opening the separate results view."""
     error = None
     try:
-        salary = parse_salary_entry(salary_text)
+        salary = parse_salary_entry(st.session_state.get("salary_entry", ""))
     except ValueError as exc:
         salary = None
         error = str(exc)
-    if error:
-        pass
-    elif salary is None:
-        error = "Please enter your annual gross salary."
-    elif not re.fullmatch(r"[0-9]{5}", zip_code.strip()):
-        error = "Please enter a five-digit ZIP code."
-    elif zip_code.strip() not in PILOT_ZIPS:
-        error = "This pilot uses selected Salt Lake City ZIPs, such as 84101, 84103 or 84111. Other locations are not implemented."
+    zip_code = st.session_state.get("zip_entry", "").strip()
+    if not error:
+        if salary is None:
+            error = "Please enter your annual gross salary."
+        elif not re.fullmatch(r"[0-9]{5}", zip_code):
+            error = "Please enter a five-digit ZIP code."
+        elif zip_code not in PILOT_ZIPS:
+            error = "This pilot uses selected Salt Lake City ZIPs, such as 84101, 84103 or 84111. Other locations are not implemented."
     if error:
         st.session_state.pop("profile", None)
-        st.error(error)
-    else:
-        st.session_state["profile"] = {"salary": salary, "zip_code": zip_code.strip()}
+        st.session_state["input_error"] = error
+        st.session_state["view"] = "inputs"
+        return
+    format_salary_entry()
+    st.session_state["profile"] = {"salary": salary, "zip_code": zip_code}
+    st.session_state.pop("input_error", None)
+    st.session_state["view"] = "results"
 
+
+def edit_profile():
+    """Restore submitted values when returning from results to the landing page."""
+    profile = st.session_state.get("profile", {})
+    salary = profile.get("salary")
+    if salary is not None:
+        st.session_state["salary_entry"] = f"{salary:,.0f}" if float(salary).is_integer() else f"{salary:,.2f}"
+    st.session_state["zip_entry"] = profile.get("zip_code", "")
+    st.session_state.pop("input_error", None)
+    st.session_state["view"] = "inputs"
+
+
+def show_assumptions():
+    """Keep detailed methodology and privacy text on the results view."""
+    with st.expander("Tax rules, assumptions, and sources"):
+        st.write("Selected ZIP codes choose the Salt Lake City demo. They do not verify a property's city boundary. Assumes wage income with no pre-tax deductions.")
+        st.write("Profile: you are married filing jointly, both adults are under 65, with one qualifying child under 17 and required Social Security numbers. You are the sole earner and pay the modeled local property taxes. Your spouse has no additional income. These are demo assumptions, not measured facts about the person using the app. The entered salary is used directly for income-tax calculations; it is not multiplied to add assumed spouse earnings.")
+        st.write("Federal: 2026 married-filing-jointly progressive brackets and a $32,200 standard deduction. Includes one nonrefundable child tax credit of up to $2,200, reduced by $50 per $1,000 (or part) of household income above $400,000. Tax is floored at zero. Refundable ACTC, EITC, other credits, payroll taxes and AMT are not modeled.")
+        st.markdown("[IRS 2026 brackets and standard deduction](https://www.irs.gov/newsroom/working-families-tax-cuts-individuals-and-workers)")
+        st.markdown("[IRS 2026 child and dependent credit calculation](https://www.irs.gov/pub/irs-prior/f1040s8--2026.pdf)")
+        st.write("Utah: assumes your entered wages equal state taxable income; 4.45% rate, less the nonrefundable taxpayer tax credit: 6% times ($32,200 joint standard deduction + $2,167 for one dependent), reduced by 1.3% of income above $37,392. Other credits and exemptions are excluded.")
+        st.markdown("[Utah income-tax rate](https://le.utah.gov/xcode/Title59/Chapter10/C59-10-S104_2026050620260506.html) | [Utah taxpayer credit, 2026 review](https://le.utah.gov/interim/2026/pdf/00003360.pdf)")
+        st.write("Home-value scenario uses 2020-2024 ACS figures: median owner-occupied home value $539,500 divided by median full-time worker earnings $62,180 = 8.67642. We multiply your individual salary by this ratio only to create a hypothetical home value. A ratio of citywide medians does not predict an individual's home value. The previously discussed 2.06 household-income multiplier is not applied to your income or taxes.")
+        st.markdown("[Census home-value data](https://www.census.gov/quickfacts/fact/table/saltlakecitycityutah/EDU635224) | [ACS full-time worker earnings reported by Neilsberg](https://www.neilsberg.com/insights/topic/salt-lake-city-ut/)")
+        st.write("Taxable home value is 55% of the scenario home value. City scenario uses the approved 2026 Salt Lake City general operations rate of 0.002374 only. County scenario uses the sum of approved countywide rates, 0.001349, excluding the separate library levy. Neither represents the complete property-tax bill.")
+        st.markdown("[Utah Tax Commission approved 2026 levy rates](https://tax.utah.gov/propertytax/rates/approved-rates/)")
+        st.write("Tax rules are for 2026. Federal spending uses FY2025 actual outlays; state uses FY2026-27 appropriations; city uses a verified FY2025-26 adopted snapshot; county uses a 2026 budget snapshot. Years and scopes are labeled in each panel. Transfers are not reallocated twice. This is not a comprehensive tax bill or a tax-return calculation.")
+
+    st.caption("Educational prototype. Inputs stay in this app session; this code does not store them in a database or send them to an AI service.")
+
+
+# A submitted profile opens a separate view; the landing page contains no results.
 profile = st.session_state.get("profile")
-# Clear a submission from the previous pilot after the deployment changes.
 if profile and profile["zip_code"] not in PILOT_ZIPS:
     st.session_state.pop("profile", None)
+    st.session_state["view"] = "inputs"
     profile = None
-if profile:
+
+if st.session_state.get("view", "inputs") == "results" and profile:
+    st.title("Where your tax dollars go")
+    st.button("Change salary or ZIP", on_click=edit_profile)
     taxes = estimate_taxes(profile["salary"])
-    st.subheader("Where your estimated tax dollars go")
     st.write(f"Your salary: **${profile['salary']:,.0f}** | ZIP: **{profile['zip_code']}**")
     columns = st.columns(2)
     for index, level in enumerate(["Federal", "State", "County", "City"]):
@@ -144,19 +170,17 @@ if profile:
         for level, tab in zip(levels, st.tabs(levels)):
             with tab:
                 show_breakdown(level, snapshots[level], taxes[level])
-
-with st.expander("Tax rules, assumptions, and sources"):
-    st.write("Selected ZIP codes choose the Salt Lake City demo. They do not verify a property's city boundary. Assumes wage income with no pre-tax deductions.")
-    st.write("Profile: you are married filing jointly, both adults are under 65, with one qualifying child under 17 and required Social Security numbers. You are the sole earner and pay the modeled local property taxes. Your spouse has no additional income. These are demo assumptions, not measured facts about the person using the app. The entered salary is used directly for income-tax calculations; it is not multiplied to add assumed spouse earnings.")
-    st.write("Federal: 2026 married-filing-jointly progressive brackets and a $32,200 standard deduction. Includes one nonrefundable child tax credit of up to $2,200, reduced by $50 per $1,000 (or part) of household income above $400,000. Tax is floored at zero. Refundable ACTC, EITC, other credits, payroll taxes and AMT are not modeled.")
-    st.markdown("[IRS 2026 brackets and standard deduction](https://www.irs.gov/newsroom/working-families-tax-cuts-individuals-and-workers)")
-    st.markdown("[IRS 2026 child and dependent credit calculation](https://www.irs.gov/pub/irs-prior/f1040s8--2026.pdf)")
-    st.write("Utah: assumes your entered wages equal state taxable income; 4.45% rate, less the nonrefundable taxpayer tax credit: 6% times ($32,200 joint standard deduction + $2,167 for one dependent), reduced by 1.3% of income above $37,392. Other credits and exemptions are excluded.")
-    st.markdown("[Utah income-tax rate](https://le.utah.gov/xcode/Title59/Chapter10/C59-10-S104_2026050620260506.html) | [Utah taxpayer credit, 2026 review](https://le.utah.gov/interim/2026/pdf/00003360.pdf)")
-    st.write("Home-value scenario uses 2020-2024 ACS figures: median owner-occupied home value $539,500 divided by median full-time worker earnings $62,180 = 8.67642. We multiply your individual salary by this ratio only to create a hypothetical home value. A ratio of citywide medians does not predict an individual's home value. The previously discussed 2.06 household-income multiplier is not applied to your income or taxes.")
-    st.markdown("[Census home-value data](https://www.census.gov/quickfacts/fact/table/saltlakecitycityutah/EDU635224) | [ACS full-time worker earnings reported by Neilsberg](https://www.neilsberg.com/insights/topic/salt-lake-city-ut/)")
-    st.write("Taxable home value is 55% of the scenario home value. City scenario uses the approved 2026 Salt Lake City general operations rate of 0.002374 only. County scenario uses the sum of approved countywide rates, 0.001349, excluding the separate library levy. Neither represents the complete property-tax bill.")
-    st.markdown("[Utah Tax Commission approved 2026 levy rates](https://tax.utah.gov/propertytax/rates/approved-rates/)")
-    st.write("Tax rules are for 2026. Federal spending uses FY2025 actual outlays; state uses FY2026-27 appropriations; city uses a verified FY2025-26 adopted snapshot; county uses a 2026 budget snapshot. Years and scopes are labeled in each panel. Transfers are not reallocated twice. This is not a comprehensive tax bill or a tax-return calculation.")
-
-st.caption("Educational prototype. Inputs stay in this app session; this code does not store them in a database or send them to an AI service.")
+    show_assumptions()
+else:
+    st.title("Your Tax Dollar")
+    st.write("Enter your salary and ZIP to see where your tax dollars go, ranked from largest to smallest.")
+    st.caption("Salt Lake City, Utah | Tax year 2026")
+    st.info("You are married, own a home in Salt Lake City, and have one child under 17.")
+    st.caption("Results show your estimated tax dollars. Assumptions and sources are available with your results.")
+    with st.container():
+        st.text_input("Your annual gross salary ($)", key="salary_entry", placeholder="Enter your salary", max_chars=20, on_change=format_salary_entry, help="Enter your individual salary before taxes, for example 100,000. For this demo, your spouse has no additional income.")
+        st.text_input("Residential ZIP code", key="zip_entry", max_chars=5, placeholder="Enter your ZIP code")
+        st.caption("Enter just your salary and ZIP. The demo profile supplies the other assumptions.")
+        st.button("Show where my tax dollars go", on_click=submit_profile)
+    if st.session_state.get("input_error"):
+        st.error(st.session_state["input_error"])
