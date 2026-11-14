@@ -10,14 +10,38 @@
     "rounding_tolerance": 0,
     "notes": "Other is the published total minus the seven named categories; it includes other functions and negative offsetting receipts. Payroll taxes are not estimated. Spending is financed by multiple revenue types and borrowing; this is a proportional illustration.",
     "rows": [
-      {"category": "Social Security", "weight": 1580686},
-      {"category": "Medicare", "weight": 996719},
-      {"category": "Health", "weight": 978878},
-      {"category": "Net interest", "weight": 970359},
-      {"category": "National defense", "weight": 916649},
-      {"category": "Income security", "weight": 701584},
-      {"category": "Education, training and social services", "weight": 71014},
-      {"category": "Other functions, net of offsets", "weight": 794103}
+      {
+        "category": "Social Security",
+        "weight": 1580686
+      },
+      {
+        "category": "Medicare",
+        "weight": 996719
+      },
+      {
+        "category": "Health",
+        "weight": 978878
+      },
+      {
+        "category": "Net interest",
+        "weight": 970359
+      },
+      {
+        "category": "National defense",
+        "weight": 916649
+      },
+      {
+        "category": "Income security",
+        "weight": 701584
+      },
+      {
+        "category": "Education, training and social services",
+        "weight": 71014
+      },
+      {
+        "category": "Other functions, net of offsets",
+        "weight": 794103
+      }
     ]
   },
   "State": {
@@ -31,16 +55,46 @@
     "rounding_tolerance": 2,
     "notes": "Source rows are rounded to thousands; displayed rows sum to 8,090,824 versus published 8,090,822. Shares use the sum of displayed rows. Transfers are shown once and not allocated again to recipient funds. Some fund uses are restricted; this is a fund-level illustration, not a legal tracing of income-tax payments.",
     "rows": [
-      {"category": "Public education", "weight": 4995847},
-      {"category": "Higher education", "weight": 1656859},
-      {"category": "Transfers to other accounts and funds", "weight": 1167554},
-      {"category": "Transportation and infrastructure", "weight": 200319},
-      {"category": "General government", "weight": 31151},
-      {"category": "Economic and community development", "weight": 29641},
-      {"category": "Social services", "weight": 5432},
-      {"category": "Executive appropriations", "weight": 3450},
-      {"category": "Criminal justice", "weight": 297},
-      {"category": "Natural resources, agriculture and environment", "weight": 274}
+      {
+        "category": "Public education",
+        "weight": 4995847
+      },
+      {
+        "category": "Higher education",
+        "weight": 1656859
+      },
+      {
+        "category": "Transfers to other accounts and funds",
+        "weight": 1167554
+      },
+      {
+        "category": "Transportation and infrastructure",
+        "weight": 200319
+      },
+      {
+        "category": "General government",
+        "weight": 31151
+      },
+      {
+        "category": "Economic and community development",
+        "weight": 29641
+      },
+      {
+        "category": "Social services",
+        "weight": 5432
+      },
+      {
+        "category": "Executive appropriations",
+        "weight": 3450
+      },
+      {
+        "category": "Criminal justice",
+        "weight": 297
+      },
+      {
+        "category": "Natural resources, agriculture and environment",
+        "weight": 274
+      }
     ]
   },
   "County": {
@@ -52,13 +106,98 @@
     "weight_unit": "tenths of a cent per total property-tax dollar",
     "published_weight_total": 129,
     "rounding_tolerance": 0,
-    "notes": "The source assigns 7.1, 2.9, 1.6, 0.8 and 0.5 cents of an overall property-tax dollar to these countywide uses. These sum to 12.9 cents and are normalized within the county share. The 0.001509 countywide rate is from the same 2026 example; the separate library levy and school/district taxes are excluded. Later changes are not incorporated.",
+    "notes": "Spending shares use the adopted Budget in Brief snapshot: 7.1, 2.9, 1.6, 0.8 and 0.5 cents of an overall property-tax dollar, normalized within the county share. The tax scenario separately uses the approved 2026 countywide levy sum of 0.001349 (general operations, bond, flood control, tort, recreation, capital improvements and health); the library levy and school/district taxes are excluded. These snapshot shares approximate allocation and do not trace the legal use of each levy.",
     "rows": [
-      {"category": "Public safety and criminal justice", "weight": 71},
-      {"category": "General public services", "weight": 29},
-      {"category": "Human services", "weight": 16},
-      {"category": "Public health", "weight": 8},
-      {"category": "Voter-approved bond debt service", "weight": 5}
+      {
+        "category": "Public safety and criminal justice",
+        "weight": 71
+      },
+      {
+        "category": "General public services",
+        "weight": 29
+      },
+      {
+        "category": "Human services",
+        "weight": 16
+      },
+      {
+        "category": "Public health",
+        "weight": 8
+      },
+      {
+        "category": "Voter-approved bond debt service",
+        "weight": 5
+      }
+    ],
+    "rate_source_url": "https://tax.utah.gov/propertytax/rates/approved-rates/"
+  },
+  "City": {
+    "jurisdiction": "Salt Lake City",
+    "period": "FY2025-26 adopted budget snapshot",
+    "scope": "General Fund departmental expenditures; city tax scenario covers the general operations levy only",
+    "source_url": "https://www.slcdocs.com/budget/bookFY26.pdf",
+    "source_location": "Printed page 28, General Fund Expenditures, FY26 Adopted Budget column",
+    "weight_unit": "USD",
+    "published_weight_total": 512495523,
+    "rounding_tolerance": 0,
+    "notes": "A historical FY2025-26 adopted spending snapshot is used, not the newer FY2026-27 total. Later amendments are not included. Non Departmental is a published category, not synonymous with administrative salaries. Its transfers are counted once. The city scenario uses the 2026 general operations levy of 0.002374 only; separate library, bond, tort and judgment levies are excluded. Allocation assumes that levy follows the overall General Fund spending mix, including spending supported by other revenues.",
+    "rows": [
+      {
+        "category": "Economic Development",
+        "weight": 2896278
+      },
+      {
+        "category": "Human Resources",
+        "weight": 5410276
+      },
+      {
+        "category": "Council Office",
+        "weight": 6167763
+      },
+      {
+        "category": "Justice Courts",
+        "weight": 6287214
+      },
+      {
+        "category": "Mayor's Office",
+        "weight": 6744269
+      },
+      {
+        "category": "911 Communications Bureau",
+        "weight": 11692519
+      },
+      {
+        "category": "Attorney's Office",
+        "weight": 13063327
+      },
+      {
+        "category": "Finance Department",
+        "weight": 13685777
+      },
+      {
+        "category": "Public Lands",
+        "weight": 33497625
+      },
+      {
+        "category": "Community & Neighborhoods",
+        "weight": 41419853
+      },
+      {
+        "category": "Public Services",
+        "weight": 49273018
+      },
+      {
+        "category": "Fire Department",
+        "weight": 54780030
+      },
+      {
+        "category": "Non Departmental",
+        "weight": 132595369
+      },
+      {
+        "category": "Police Department",
+        "weight": 134982205
+      }
     ]
   }
 }
