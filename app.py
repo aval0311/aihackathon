@@ -1,5 +1,8 @@
 # Create the Streamlit application file.
+import csv
+import json
 import re
+from pathlib import Path
 import streamlit as st
 
 # Configure the page; use the default icon to avoid encoding issues.
@@ -8,10 +11,87 @@ st.set_page_config(
     layout="centered",
 )
 
-# Update these values when the pilot location is confirmed.
-CITY = "City to be confirmed"
-COUNTY = "County to be confirmed"
-STATE = "State to be confirmed"
+# Resolve data relative to this script, including on Streamlit Cloud.
+CITY = "Draper"
+COUNTY = "Salt Lake and Utah counties"
+STATE = "Utah"
+DATA_DIR = Path(__file__).resolve().parent / "data"
+
+
+def load_city_budget():
+    """Load the reviewed snapshot and check it against its source total."""
+    metadata = json.loads(
+        (DATA_DIR / "draper_general_fund_fy2027_metadata.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    with (DATA_DIR / metadata["dataset_file"]).open(
+        encoding="utf-8", newline=""
+    ) as source_file:
+        rows = list(csv.DictReader(source_file))
+    amounts = [int(row["amount_usd"]) for row in rows]
+    total = sum(amounts)
+    if (
+        not rows
+        or any(amount < 0 for amount in amounts)
+        or total <= 0
+        or total != metadata["published_total_usd"]
+        or len({row["category"] for row in rows}) != len(rows)
+    ):
+        raise ValueError("Budget data does not match its published total.")
+    spending = [
+        {
+            "Category": row["category"],
+            "Budget (USD)": amount,
+            "Share (%)": amount / total * 100,
+        }
+        for row, amount in zip(rows, amounts)
+    ]
+    return sorted(spending, key=lambda row: row["Budget (USD)"], reverse=True), metadata
+
+
+def show_city_budget():
+    """Display city spending without inferring personal taxes from salary."""
+    try:
+        spending, metadata = load_city_budget()
+    except (OSError, ValueError, KeyError, TypeError):
+        st.error("City budget data could not be loaded or verified.")
+        return
+
+    st.subheader("Draper General Fund")
+    st.caption(
+        f"FY {metadata['fiscal_year']} | August 2026 adoption snapshot | "
+        "Budgeted amounts, including transfers"
+    )
+    st.metric("General Fund budget", f"${metadata['published_total_usd']:,.0f}")
+    st.bar_chart(
+        spending,
+        x="Category",
+        y="Budget (USD)",
+        horizontal=True,
+        height=480,
+    )
+    st.dataframe(
+        spending,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Budget (USD)": st.column_config.NumberColumn(format="$%d"),
+            "Share (%)": st.column_config.NumberColumn(format="%.2f%%"),
+        },
+    )
+    st.markdown(
+        f"[Official budget presentation]({metadata['source_url']}) "
+        f"- PDF page {metadata['source_pdf_page']}, FY2027 column."
+    )
+    st.info(
+        "These percentages show how Draper's General Fund budget is allocated. "
+        "They do not estimate your personal city taxes and do not change "
+        "with your salary or ZIP code."
+    )
+    with st.expander("About this city dataset"):
+        for limitation in metadata["limitations"]:
+            st.write(f"- {limitation}")
 
 # Display the app introduction and development status.
 st.title("Your Tax Dollar")
@@ -20,12 +100,16 @@ st.write(
     "government budgets support."
 )
 st.info(
-    "Prototype in development. Tax calculations and verified "
-    "budget datasets are not connected yet."
+    "Draper's official city budget is connected. Tax calculations, "
+    "other government budgets, and Gemini explanations are still in development."
 )
 
 # Use plain-text separators to avoid corrupted display characters.
 st.caption(f"Pilot location: {CITY} | {COUNTY} | {STATE}")
+st.caption(
+    "This pilot shows Draper's budget for every ZIP entered. "
+    "ZIP codes are not yet matched to city or county boundaries."
+)
 
 # Collect inputs together; process them only when the user submits.
 with st.form("tax_inputs"):
@@ -74,8 +158,8 @@ if profile:
         f"ZIP code: **{profile['zip_code']}**"
     )
     st.caption(
-        "ZIP format checked. Supported location and jurisdiction "
-        "validation will be added once the pilot city is confirmed."
+        "ZIP format checked only. The City tab shows the Draper pilot budget; "
+        "your ZIP has not been verified as a Draper address."
     )
 
     # Reserve space for calculated taxes without inventing estimates.
@@ -91,10 +175,13 @@ if profile:
     for level, tab in zip(levels, tabs):
         with tab:
             st.write(f"**{level} spending breakdown**")
-            st.info(
-                "Awaiting reviewed budget data. Categories, charts, "
-                "fiscal year, and source links will appear here."
-            )
+            if level == "City":
+                show_city_budget()
+            else:
+                st.info(
+                    "Awaiting reviewed budget data. Categories, charts, "
+                    "fiscal year, and source links will appear here."
+                )
 
             if level in ["County", "City"]:
                 st.caption(
@@ -111,9 +198,14 @@ if profile:
 
 # Keep source information and methodology accessible.
 with st.expander("Sources and assumptions"):
+    st.markdown(
+        "City: [Draper FY2027 Final Budget Adoption]"
+        "(https://www.utah.gov/pmn/files/1477201.pdf), PDF page 12. "
+        "General Fund, August 18, 2026 snapshot; later amendments not included."
+    )
     st.write(
-        "Official source links, tax year, budget fiscal years, "
-        "and calculation assumptions will be listed here."
+        "Federal, state, and county sources and tax calculation rules "
+        "are pending. No personal tax estimate is calculated yet."
     )
     st.write(
         "Spending allocations will be illustrative estimates, "
