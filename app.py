@@ -5,9 +5,54 @@ from pathlib import Path
 import streamlit as st
 from tax_model import estimate_taxes, allocate_tax_dollars
 
-st.set_page_config(page_title="Your Tax Dollar", layout="centered")
+st.set_page_config(page_title="Your Tax Dollar", page_icon="??", layout="centered")
 DATA_DIR = Path(__file__).resolve().parent / "data"
 PILOT_ZIPS = {"84101", "84102", "84103", "84104", "84105", "84106", "84108", "84111", "84112", "84116"}
+LEVEL_STYLE = {
+    "Federal": {"icon": "???", "color": "#087F8C", "place": "United States"},
+    "State": {"icon": "???", "color": "#6554A4", "place": "Utah"},
+    "County": {"icon": "??", "color": "#33744A", "place": "Salt Lake County"},
+    "City": {"icon": "???", "color": "#A76512", "place": "Salt Lake City"},
+}
+
+# Scope decorative CSS to our own cards; native controls use the theme above.
+st.markdown("""
+<style>
+.tax-eyebrow {color:#087F8C;font-size:.8rem;font-weight:750;letter-spacing:.12em;text-transform:uppercase;margin:0 0 .35rem;}
+.tax-tagline {font-size:1.4rem;font-weight:650;line-height:1.4;margin:0 0 .5rem;}
+.tax-profile {background:#EDF5F0;color:#172B4D;border-radius:16px;padding:1rem 1.2rem;border-left:5px solid #D5A73C;margin:.5rem 0;}
+.tax-profile strong {display:block;margin-bottom:.3rem;}
+.tax-summary {background:#FFFFFF;color:#172B4D;border:1px solid #DCE5E4;border-top:4px solid var(--accent);border-radius:16px;padding:1rem 1.2rem;margin-bottom:1rem;}
+.tax-summary-label {font-size:1rem;font-weight:700;}
+.tax-summary-amount {font-size:clamp(1.5rem,4vw,2rem);font-weight:750;line-height:1.6;font-variant-numeric:tabular-nums;}
+.tax-summary-note {font-size:.8rem;color:#526078;}
+</style>
+""", unsafe_allow_html=True)
+
+
+def allocation_chart_spec(allocations, color):
+    """Keep category order explicit and leave room for dollar labels at bar ends."""
+    largest = max(row["Your allocation (USD)"] for row in allocations)
+    return {
+        "description": "Your annual tax allocations ranked from largest to smallest, with dollar labels.",
+        "encoding": {
+            "y": {"field": "Category", "type": "nominal", "title": None,
+                  "sort": [row["Category"] for row in allocations],
+                  "axis": {"labelLimit": 180, "labelFontSize": 12, "ticks": False, "domain": False}},
+            "x": {"field": "Your allocation (USD)", "type": "quantitative",
+                  "title": "Your annual allocation (USD)", "scale": {"domain": [0, max(1, largest * 1.4)]},
+                  "axis": {"format": "$,.0f", "tickCount": 4, "gridColor": "#E7ECEB", "domain": False}},
+            "tooltip": [{"field": "Category", "type": "nominal"},
+                        {"field": "Your allocation (USD)", "type": "quantitative", "format": "$,.2f"},
+                        {"field": "Share (%)", "type": "quantitative", "format": ".2f"}],
+        },
+        "layer": [
+            {"mark": {"type": "bar", "color": color, "cornerRadiusEnd": 5, "height": 20}},
+            {"mark": {"type": "text", "align": "left", "dx": 7, "color": "#172B4D", "fontSize": 12},
+             "encoding": {"text": {"field": "Your allocation (USD)", "type": "quantitative", "format": "$,.2f"}}},
+        ],
+        "config": {"view": {"stroke": None}, "background": "#FFFCF5"},
+    }
 
 
 def parse_salary_entry(value):
@@ -51,36 +96,36 @@ def load_snapshots():
 def show_breakdown(level, snapshot, amount):
     """Lead with personal dollar allocations, then provide source context."""
     local = level in ("County", "City")
+    style = LEVEL_STYLE[level]
     label = "Your illustrative property-tax allocation" if local else "Your estimated income-tax allocation"
-    st.subheader(f"{snapshot['jurisdiction']}: your estimated tax dollars")
+    st.subheader(f"{style['icon']} {snapshot['jurisdiction']}")
     st.caption(f"{label} | {snapshot['period']}")
-    st.metric("Your annual property-tax scenario" if local else "Your estimated annual income tax", f"${amount:,.2f}")
     allocations = allocate_tax_dollars(snapshot["rows"], amount)
-    if amount > 0:
-        top = allocations[0]
-        st.write(f"The largest share supports **{top['Category']}**: **${top['Your allocation (USD)']:,.2f} per year** ({top['Share (%)']:.2f}%).")
-    else:
-        st.write("This model returns zero tax for this level, so all allocations are zero.")
+    with st.container(border=True):
+        if amount > 0:
+            top = allocations[0]
+            st.caption(f"YOUR LARGEST {level.upper()} ALLOCATION")
+            st.subheader(top["Category"])
+            st.write(f"About **${top['Your allocation (USD)']:,.2f} per year** of your estimated {level.lower()} taxes supports this category - **{top['Share (%)']:.1f}%** of this breakdown.")
+        else:
+            st.write("Your estimated tax is $0 at this level. Each allocation below is $0.")
+    st.markdown("#### Follow your dollars")
+    st.caption("Largest to smallest � Hover over a bar for more detail.")
     st.vega_lite_chart(
         allocations,
-        {
-            "mark": "bar",
-            "encoding": {
-                "y": {"field": "Category", "type": "nominal", "sort": [row["Category"] for row in allocations], "axis": {"labelLimit": 200}},
-                "x": {"field": "Your allocation (USD)", "type": "quantitative", "title": "Illustrative annual dollars (USD)", "axis": {"format": "$,.2f"}},
-                "tooltip": [{"field": "Category", "type": "nominal"}, {"field": "Your allocation (USD)", "type": "quantitative", "format": "$,.2f"}],
-            },
-        },
-        height=max(240, len(allocations) * 32),
+        allocation_chart_spec(allocations, style["color"]),
+        height=max(240, len(allocations) * 38),
         use_container_width=True,
+        theme=None,
     )
-    st.dataframe(
-        allocations, hide_index=True, use_container_width=True,
-        column_config={"Your allocation (USD)": st.column_config.NumberColumn(format="$%.2f"), "Share (%)": st.column_config.NumberColumn(format="%.2f%%")},
-    )
-    st.caption("Largest to smallest. Allocations reconcile to the displayed tax amount, including rounding.")
-    st.markdown(f"[Official spending source]({snapshot['source_url']}) - {snapshot['source_location']}.")
-    with st.expander("How this breakdown works"):
+    with st.expander("See every allocation in a table"):
+        st.dataframe(
+            allocations, hide_index=True, use_container_width=True,
+            column_config={"Your allocation (USD)": st.column_config.NumberColumn(format="$%.2f"), "Share (%)": st.column_config.NumberColumn(format="%.2f%%")},
+        )
+        st.caption("Allocations add up to your displayed tax amount, including rounding.")
+    with st.expander("Budget source and how this breakdown works"):
+        st.markdown(f"[Official spending source]({snapshot['source_url']}) - {snapshot['source_location']}.")
         st.write("Allocation = tax amount multiplied by each category's share of this spending snapshot. These are proportional illustrations, not a trace of your individual payments.")
         st.write(snapshot["scope"])
         st.write(snapshot["notes"])
@@ -153,14 +198,26 @@ if profile and profile["zip_code"] not in PILOT_ZIPS:
     profile = None
 
 if st.session_state.get("view", "inputs") == "results" and profile:
+    st.markdown('<p class="tax-eyebrow">Your Tax Dollar � Your personal tax receipt</p>', unsafe_allow_html=True)
     st.title("Where your tax dollars go")
     st.button("Change salary or ZIP", on_click=edit_profile)
     taxes = estimate_taxes(profile["salary"])
-    st.write(f"Your salary: **${profile['salary']:,.0f}** | ZIP: **{profile['zip_code']}**")
+    st.write(f"Your salary: **${profile['salary']:,.0f}** � ZIP: **{profile['zip_code']}** � Tax year **2026**")
+    st.caption("An estimate based on your demo profile and published spending shares.")
+    # Two columns keep amounts readable on a projected screen and stack on phones.
     columns = st.columns(2)
     for index, level in enumerate(["Federal", "State", "County", "City"]):
-        columns[index % 2].metric(f"Your {level.lower()} tax scenario" if level in ("County", "City") else f"Your {level.lower()} income tax estimate", f"${taxes[level]:,.2f}")
+        style = LEVEL_STYLE[level]
+        note = "Property-tax scenario / year" if level in ("County", "City") else "Estimated income tax / year"
+        columns[index % 2].markdown(
+            f'<div class="tax-summary" style="--accent:{style["color"]}">'
+            f'<div class="tax-summary-label">{style["icon"]} {level} � {style["place"]}</div>'
+            f'<div class="tax-summary-amount">${taxes[level]:,.2f}</div>'
+            f'<div class="tax-summary-note">{note}</div></div>', unsafe_allow_html=True,
+        )
     st.caption(f"City and county examples assume you pay the modeled taxes on a home worth ${taxes['assumed_home_value']:,.0f}. They do not calculate your actual property taxes.")
+    st.markdown("### Explore your impact")
+    st.write("Choose a government level to follow your dollars.")
     try:
         snapshots = load_snapshots()
     except (OSError, ValueError, KeyError, TypeError):
@@ -172,15 +229,18 @@ if st.session_state.get("view", "inputs") == "results" and profile:
                 show_breakdown(level, snapshots[level], taxes[level])
     show_assumptions()
 else:
+    st.markdown('<p class="tax-eyebrow">?? A little clarity. A closer community.</p>', unsafe_allow_html=True)
     st.title("Your Tax Dollar")
-    st.write("Enter your salary and ZIP to see where your tax dollars go, ranked from largest to smallest.")
-    st.caption("Salt Lake City, Utah | Tax year 2026")
-    st.info("You are married, own a home in Salt Lake City, and have one child under 17.")
-    st.caption("Results show your estimated tax dollars. Assumptions and sources are available with your results.")
-    with st.container():
+    st.markdown('<p class="tax-tagline">Your money. Your community.<br>See the connection.</p>', unsafe_allow_html=True)
+    st.write("Discover the services your tax dollars help support - from your neighborhood to the nation.")
+    st.caption("Salt Lake City, Utah � Tax year 2026")
+    st.markdown('<div class="tax-profile"><strong>?? Your demo profile</strong>You are married, own a home in Salt Lake City, and have one child under 17.</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("### Start with two simple details")
+        st.caption("Your individual salary + ZIP  your estimated tax story")
         st.text_input("Your annual gross salary ($)", key="salary_entry", placeholder="Enter your salary", max_chars=20, on_change=format_salary_entry, help="Enter your individual salary before taxes, for example 100,000. For this demo, your spouse has no additional income.")
         st.text_input("Residential ZIP code", key="zip_entry", max_chars=5, placeholder="Enter your ZIP code")
-        st.caption("Enter just your salary and ZIP. The demo profile supplies the other assumptions.")
-        st.button("Show where my tax dollars go", on_click=submit_profile)
+        st.caption("Salt Lake City pilot � Try ZIP 84103. Estimates and sources appear with your results.")
+        st.button("Show where my tax dollars go", on_click=submit_profile, type="primary", use_container_width=True)
     if st.session_state.get("input_error"):
         st.error(st.session_state["input_error"])
