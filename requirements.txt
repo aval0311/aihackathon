@@ -1,0 +1,2 @@
+# Install Streamlit; additional packages will be added as needed.
+streamlit>=1.40,<2
