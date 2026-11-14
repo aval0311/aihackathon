@@ -6,3 +6,6 @@ backgroundColor = "#FFFCF5"
 secondaryBackgroundColor = "#F0F5F4"
 textColor = "#172B4D"
 font = "sans serif"
+
+# Larger text for the audience demonstration.
+baseFontSize = 20
