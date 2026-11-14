@@ -1,14 +1,11 @@
-"""Small tax and allocation model for a married Salt Lake City household."""
+"""Individual tax story: married Salt Lake City homeowner, sole earner, one child."""
 from decimal import Decimal, ROUND_HALF_UP, ROUND_CEILING
 
 TAX_YEAR = 2026
 STANDARD_DEDUCTION = 32200  # Married filing jointly, both adults under 65.
 MEDIAN_PERSONAL_EARNINGS = Decimal('62180')
-MEDIAN_MARRIED_FAMILY_INCOME = Decimal('127972')
 MEDIAN_HOME_VALUE = Decimal('539500')
 # Ratios of citywide medians define a scenario, not an individual prediction.
-HOUSEHOLD_INCOME_MULTIPLIER = MEDIAN_MARRIED_FAMILY_INCOME / MEDIAN_PERSONAL_EARNINGS
-HOME_TO_HOUSEHOLD_INCOME_MULTIPLIER = MEDIAN_HOME_VALUE / MEDIAN_MARRIED_FAMILY_INCOME
 LOCAL_HOME_VALUE_MULTIPLIER = MEDIAN_HOME_VALUE / MEDIAN_PERSONAL_EARNINGS
 LOCAL_TAXABLE_HOME_SHARE = 0.55
 CITY_PROPERTY_RATE = 0.002374  # Salt Lake City general operations levy only.
@@ -20,11 +17,12 @@ def money(value):
 
 
 def estimate_taxes(salary):
-    """Individual salary -> modeled joint income; one qualifying child under 17."""
+    """Apply joint-filing rules to the individual's wages; spouse income is zero."""
     salary = Decimal(str(salary))
     if not salary.is_finite() or not 0 <= salary <= 10000000:
         raise ValueError('Salary must be between zero and 10 million dollars.')
-    household_income = Decimal(str(money(salary * HOUSEHOLD_INCOME_MULTIPLIER)))
+    # The demo citizen is the sole earner; never inflate the entered salary.
+    household_income = Decimal(str(money(salary)))
     taxable_income = max(0, household_income - STANDARD_DEDUCTION)
     brackets = [(24800, Decimal('.10')), (100800, Decimal('.12')), (211400, Decimal('.22')),
                 (403550, Decimal('.24')), (512450, Decimal('.32')), (768700, Decimal('.35')),
@@ -45,7 +43,8 @@ def estimate_taxes(salary):
     utah_credit = max(0, Decimal('.06') * (STANDARD_DEDUCTION + 2167)
                       - Decimal('.013') * max(0, household_income - 37392))
     utah = max(0, household_income * Decimal('.0445') - utah_credit)
-    assumed_home_value = Decimal(str(money(household_income * HOME_TO_HOUSEHOLD_INCOME_MULTIPLIER)))
+    # Home scenario is based on individual salary, independent of spouse income.
+    assumed_home_value = Decimal(str(money(salary * LOCAL_HOME_VALUE_MULTIPLIER)))
     taxable_home_value = assumed_home_value * Decimal(str(LOCAL_TAXABLE_HOME_SHARE))
     return {
         'Federal': money(federal),
