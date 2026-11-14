@@ -39,34 +39,30 @@ st.markdown("""
 .tax-leaf>span:first-child {overflow-wrap:anywhere;}
 .tax-node-context,.tax-metric-context {font-size:.8rem;color:#526078;margin:.5rem 0;}
 @media(max-width:480px) {.tax-node summary,.tax-leaf {flex-wrap:wrap;}.tax-node-amount {margin-left:1.3rem;}}
+.tax-bar-row {margin:1rem 0 1.25rem;}
+.tax-bar-label {display:flex;align-items:baseline;justify-content:space-between;gap:1rem;font-size:1rem;color:#172B4D;}
+.tax-bar-label span {min-width:0;overflow-wrap:anywhere;}
+.tax-bar-label strong {flex-shrink:0;font-variant-numeric:tabular-nums;}
+.tax-bar-track {height:14px;background:#E3EAE9;border-radius:7px;margin-top:.45rem;overflow:hidden;}
+.tax-bar-fill {height:100%;border-radius:7px;}
+@media(max-width:480px) {.tax-node summary>span:first-child {min-width:0;overflow-wrap:anywhere;}.tax-node-content {padding-left:.6rem;padding-right:.6rem;}.tax-bar-label {gap:.65rem;}}
 </style>
 """, unsafe_allow_html=True)
 
 
-def allocation_chart_spec(allocations, color):
-    """Keep category order explicit and leave room for dollar labels at bar ends."""
+def render_allocation_chart(allocations, color):
+    """Responsive bars keep full category names and exact dollars above each bar."""
     largest = max(row["Your allocation (USD)"] for row in allocations)
-    return {
-        "description": "Your annual tax allocations ranked from largest to smallest, with dollar labels.",
-        "encoding": {
-            "y": {"field": "Category", "type": "nominal", "title": None,
-                  "sort": [row["Category"] for row in allocations],
-                  "axis": {"labelLimit": 180, "labelFontSize": 12, "ticks": False, "domain": False}},
-            "x": {"field": "Your allocation (USD)", "type": "quantitative",
-                  "title": "Your annual allocation (USD)", "scale": {"domain": [0, max(1, largest * 1.4)]},
-                  "axis": {"format": "$,.0f", "tickCount": 4, "gridColor": "#E7ECEB", "domain": False}},
-            "tooltip": [{"field": "Category", "type": "nominal"},
-                        {"field": "Your allocation (USD)", "type": "quantitative", "format": "$,.2f"},
-                        {"field": "Share (%)", "type": "quantitative", "format": ".2f"}],
-        },
-        "layer": [
-            {"mark": {"type": "bar", "color": color, "cornerRadiusEnd": 5, "height": 20}},
-            {"mark": {"type": "text", "align": "left", "dx": 7, "color": "#172B4D", "fontSize": 12},
-             "encoding": {"text": {"field": "Your allocation (USD)", "type": "quantitative", "format": "$,.2f"}}},
-        ],
-        "config": {"view": {"stroke": None}, "background": "#FFFCF5"},
-    }
-
+    html = '<div class="tax-bars" role="list" aria-label="Annual allocations, largest to smallest">'
+    for row in allocations:
+        name = escape(row["Category"])
+        amount = row["Your allocation (USD)"]
+        width = amount / largest * 100 if largest else 0
+        html += (f'<div class="tax-bar-row" role="listitem"><div class="tax-bar-label">'
+                 f'<span>{name}</span><strong>${amount:,.2f}</strong></div>'
+                 f'<div class="tax-bar-track" aria-hidden="true"><div class="tax-bar-fill" '
+                 f'style="width:{width:.6f}%;background:{color}"></div></div></div>')
+    return html + '</div>'
 
 def parse_salary_entry(value):
     """Accept plain digits or correctly grouped commas, with optional cents."""
@@ -160,8 +156,7 @@ def show_breakdown(level, pool, amount):
             st.write("Your estimated tax is $0 at this level. Each allocation below is $0.")
     st.markdown("#### Follow your dollars")
     st.caption("Largest to smallest. Dollar amounts are annual estimates.")
-    st.vega_lite_chart(allocations, allocation_chart_spec(allocations, style["color"]),
-                       height=max(240, len(allocations) * 38), use_container_width=True, theme=None)
+    st.markdown(render_allocation_chart(allocations, style["color"]), unsafe_allow_html=True)
     st.markdown("#### Explore the categories")
     st.caption("Select + to see named subcategories. Select + again where more detail is available. Subcategories are parts of their parent amount, not additional taxes.")
     st.markdown(render_allocation_details(pool, allocations, amounts, groups), unsafe_allow_html=True)
@@ -257,9 +252,10 @@ if st.session_state.get("view", "inputs") == "results" and profile:
     taxes = estimate_taxes(profile["salary"])
     st.write(f"Your salary: **${profile['salary']:,.0f}** · ZIP: **{profile['zip_code']}** · Tax year **2026**")
     st.caption("An estimate based on your demo profile and published spending shares.")
-    # Two columns keep amounts readable on a projected screen and stack on phones.
-    columns = st.columns(2)
+    # Separate rows preserve Federal, State, County, City order when columns stack.
     for index, level in enumerate(["Federal", "State", "County", "City"]):
+        if index % 2 == 0:
+            columns = st.columns(2)
         style = LEVEL_STYLE[level]
         note = "Property-tax scenario / year" if level in ("County", "City") else "Estimated income tax / year"
         columns[index % 2].markdown(
