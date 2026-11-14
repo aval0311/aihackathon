@@ -1,0 +1,29 @@
+{
+  "dataset_file": "draper_general_fund_fy2027.csv",
+  "government_level": "City",
+  "jurisdiction": "Draper, Utah",
+  "fiscal_year": "2026-27 (FY2027)",
+  "budget_scope": "General Fund",
+  "measure": "Budgeted expenditure and transfers by department",
+  "currency": "USD",
+  "published_total_usd": 54133400,
+  "source_title": "FY2027 Final Budget Adoption",
+  "source_publisher": "Draper City Finance Department",
+  "source_date": "2026-08-18",
+  "source_url": "https://www.utah.gov/pmn/files/1477201.pdf",
+  "source_pdf_page": 12,
+  "source_table": "General Fund - Expense (By Dept), FY2027 column",
+  "adoption_evidence_url": "https://www.utah.gov/pmn/files/1483063.pdf",
+  "adoption_evidence_pdf_pages": [7, 8],
+  "resolution": "26-39",
+  "retrieved_on": "2026-11-14",
+  "verification": "All 13 categories were transcribed from the FY2027 column; their sum matches the published total exactly.",
+  "limitations": [
+    "August 2026 budget adoption snapshot; later amendments have not been incorporated.",
+    "Budgeted amounts, not actual spending.",
+    "General Fund only, not all city funds.",
+    "Transfers are included once as a General Fund use; do not add receiving-fund spending to this denominator.",
+    "Spending shares describe this fund's allocation, not an individual's actual tax payments.",
+    "These figures do not calculate city tax liability from salary or ZIP code."
+  ]
+}
