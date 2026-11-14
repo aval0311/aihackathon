@@ -195,7 +195,8 @@ with st.form("tax_inputs"):
     salary = st.number_input(
         "Annual gross salary ($)",
         min_value=0,
-        value=60000,
+        value=None,
+        placeholder="Enter your salary",
         step=1000,
         help="Your annual wages before taxes and deductions.",
     )
@@ -234,7 +235,10 @@ with st.form("tax_inputs"):
 
 # Validate ZIP format before storing the submitted inputs.
 if submitted:
-    if not re.fullmatch(r"[0-9]{5}", zip_code.strip()):
+    if salary is None:
+        st.session_state.pop("profile", None)
+        st.error("Please enter your annual gross salary.")
+    elif not re.fullmatch(r"[0-9]{5}", zip_code.strip()):
         # Clear old results so they do not appear under a new error.
         st.session_state.pop("profile", None)
         st.error("Please enter a five-digit ZIP code.")
