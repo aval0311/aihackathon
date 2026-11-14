@@ -6,6 +6,10 @@ Your Tax Dollar is a public Streamlit prototype that helps Salt Lake City reside
 
 **[Open the live app](https://your-tax-dollar.streamlit.app/)** | **[Public repository](https://github.com/aval0311/aihackathon)**
 
+## Presentation
+
+[View the Your Tax Dollar presentation](https://claude.ai/artifact/FReM1PZ3yArYPtgvGDgxKn?utm_source=mlh&utm_medium=referral&utm_content=Slides#slide-3dd33bdac6c2)
+
 ## Try the demo
 
 1. Enter a salary, such as **100,000**, and ZIP **84103**.
