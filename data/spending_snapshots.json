@@ -1,0 +1,64 @@
+{
+  "Federal": {
+    "jurisdiction": "United States",
+    "period": "FY2025 actual outlays",
+    "scope": "Federal spending mix; not restricted to individual income-tax revenue",
+    "source_url": "https://fiscal.treasury.gov/system/files/files/reports-statements/combined-statement/cs2025/outlay.pdf",
+    "source_location": "PDF page 2, FY2025 column (millions of dollars)",
+    "weight_unit": "millions of USD",
+    "published_weight_total": 7009992,
+    "rounding_tolerance": 0,
+    "notes": "Other is the published total minus the seven named categories; it includes other functions and negative offsetting receipts. Payroll taxes are not estimated. Spending is financed by multiple revenue types and borrowing; this is a proportional illustration.",
+    "rows": [
+      {"category": "Social Security", "weight": 1580686},
+      {"category": "Medicare", "weight": 996719},
+      {"category": "Health", "weight": 978878},
+      {"category": "Net interest", "weight": 970359},
+      {"category": "National defense", "weight": 916649},
+      {"category": "Income security", "weight": 701584},
+      {"category": "Education, training and social services", "weight": 71014},
+      {"category": "Other functions, net of offsets", "weight": 794103}
+    ]
+  },
+  "State": {
+    "jurisdiction": "Utah",
+    "period": "FY2026-27 appropriations",
+    "scope": "Income Tax and Uniform School Funds",
+    "source_url": "https://le.utah.gov/interim/2026/pdf/00002311.pdf",
+    "source_location": "Table 6, printed page 1-15, FY2027 Appropriated column (thousands of dollars)",
+    "weight_unit": "thousands of USD",
+    "published_weight_total": 8090822,
+    "rounding_tolerance": 2,
+    "notes": "Source rows are rounded to thousands; displayed rows sum to 8,090,824 versus published 8,090,822. Shares use the sum of displayed rows. Transfers are shown once and not allocated again to recipient funds. Some fund uses are restricted; this is a fund-level illustration, not a legal tracing of income-tax payments.",
+    "rows": [
+      {"category": "Public education", "weight": 4995847},
+      {"category": "Higher education", "weight": 1656859},
+      {"category": "Transfers to other accounts and funds", "weight": 1167554},
+      {"category": "Transportation and infrastructure", "weight": 200319},
+      {"category": "General government", "weight": 31151},
+      {"category": "Economic and community development", "weight": 29641},
+      {"category": "Social services", "weight": 5432},
+      {"category": "Executive appropriations", "weight": 3450},
+      {"category": "Criminal justice", "weight": 297},
+      {"category": "Natural resources, agriculture and environment", "weight": 274}
+    ]
+  },
+  "County": {
+    "jurisdiction": "Salt Lake County",
+    "period": "2026 adopted budget snapshot",
+    "scope": "Countywide property-tax spending mix, excluding the separate library levy",
+    "source_url": "https://www.saltlakecounty.gov/globalassets/1-site-files/mayor-finance/budget/budget-documents/2026/supplemental/4.5---2026-adopted-budget-in-brief-12-9-2025.pdf?v=2",
+    "source_location": "Printed pages 10-11 (PDF pages 11-12): countywide rate and uses of property taxes",
+    "weight_unit": "tenths of a cent per total property-tax dollar",
+    "published_weight_total": 129,
+    "rounding_tolerance": 0,
+    "notes": "The source assigns 7.1, 2.9, 1.6, 0.8 and 0.5 cents of an overall property-tax dollar to these countywide uses. These sum to 12.9 cents and are normalized within the county share. The 0.001509 countywide rate is from the same 2026 example; the separate library levy and school/district taxes are excluded. Later changes are not incorporated.",
+    "rows": [
+      {"category": "Public safety and criminal justice", "weight": 71},
+      {"category": "General public services", "weight": 29},
+      {"category": "Human services", "weight": 16},
+      {"category": "Public health", "weight": 8},
+      {"category": "Voter-approved bond debt service", "weight": 5}
+    ]
+  }
+}
