@@ -65,13 +65,14 @@ def show_breakdown(level, snapshot, amount):
 
 st.title("Your Tax Dollar")
 st.write("Enter your personal salary and ZIP to explore the services your household's tax dollars could support, ranked from largest to smallest.")
-st.caption("Salt Lake City / Salt Lake County pilot | Married filing jointly, one dependent | Tax year 2026")
-st.info("Demo profile: two married adults under 65 and one qualifying child under 17. We model household income at about 2.06 times your personal salary, then a primary home worth about 4.22 times that household income. These ratios of citywide medians define a hypothetical scenario, not your spouse's actual earnings or your home's value.")
+st.caption("Salt Lake City, Utah | Tax year 2026")
+st.info("Demo profile: Married homeowners in Salt Lake City with one child under 17.")
+st.caption("Your salary and local averages help illustrate this household's taxes. See assumptions and sources below.")
 
 with st.form("tax_inputs"):
     salary = st.number_input("Your annual gross salary ($)", min_value=0, max_value=10000000, value=None, placeholder="Enter your salary", step=1000, help="Enter your individual salary, not combined household income. The prototype applies its disclosed household-income assumption automatically.")
     zip_code = st.text_input("Residential ZIP code", max_chars=5, placeholder="Enter your ZIP code")
-    st.caption("Only salary and ZIP are required. Assumes wage income, the joint standard deduction, one eligible child, and no pre-tax deductions. Payroll taxes, refundable credits and most other credits are excluded. ZIPs select the Salt Lake City pilot scenario; they do not verify a parcel's city boundary.")
+    st.caption("Enter just your salary and ZIP. Results use the demo household and show estimated allocations.")
     submitted = st.form_submit_button("Show where my tax dollars could go")
 
 if submitted:
@@ -97,11 +98,11 @@ if profile:
     taxes = estimate_taxes(profile["salary"])
     st.subheader("Your household's annual tax story")
     st.write(f"Your salary: **${profile['salary']:,.0f}** | ZIP: **{profile['zip_code']}**")
-    st.write(f"Modeled household gross income: **${taxes['household_income']:,.2f}** (about 2.06 times your salary). All four panels describe this household scenario.")
+    st.write(f"Assumed household income: **${taxes['household_income']:,.2f}** (about 2.06 times your salary).")
     columns = st.columns(2)
     for index, level in enumerate(["Federal", "State", "County", "City"]):
         columns[index % 2].metric(f"{level} household homeowner scenario" if level in ("County", "City") else f"{level} household income tax estimate", f"${taxes[level]:,.2f}")
-    st.warning(f"Local scenario only: primary home worth ${taxes['assumed_home_value']:,.0f}, about 4.22 times modeled household income or 8.68 times your entered salary, with 55% taxable value. City tax covers only the general operations levy. Separate library, school, district and other city levies, sales taxes, and additional exemptions are excluded.")
+    st.caption(f"City and county examples assume a home worth ${taxes['assumed_home_value']:,.0f}. They do not calculate your actual property taxes.")
     try:
         snapshots = load_snapshots()
     except (OSError, ValueError, KeyError, TypeError):
@@ -113,6 +114,7 @@ if profile:
                 show_breakdown(level, snapshots[level], taxes[level])
 
 with st.expander("Tax rules, assumptions, and sources"):
+    st.write("Selected ZIP codes choose the Salt Lake City demo. They do not verify a property's city boundary. Assumes wage income with no pre-tax deductions.")
     st.write("Profile: married filing jointly, both adults under 65, with one qualifying child under 17 and required Social Security numbers. The child assumption is a demo choice, not a measured city average. Household income is modeled from the citizen's personal salary; it is not an estimate of actual spouse earnings.")
     st.write("Federal: 2026 married-filing-jointly progressive brackets and a $32,200 standard deduction. Includes one nonrefundable child tax credit of up to $2,200, reduced by $50 per $1,000 (or part) of household income above $400,000. Tax is floored at zero. Refundable ACTC, EITC, other credits, payroll taxes and AMT are not modeled.")
     st.markdown("[IRS 2026 brackets and standard deduction](https://www.irs.gov/newsroom/working-families-tax-cuts-individuals-and-workers)")
