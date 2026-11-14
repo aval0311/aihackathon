@@ -18,34 +18,47 @@ LEVEL_STYLE = {
 # Scope decorative CSS to our own cards; native controls use the theme above.
 st.markdown("""
 <style>
-.tax-eyebrow {color:#087F8C;font-size:.8rem;font-weight:750;letter-spacing:.12em;text-transform:uppercase;margin:0 0 .35rem;}
-.tax-tagline {font-size:1.4rem;font-weight:650;line-height:1.4;margin:0 0 .5rem;}
-.tax-profile {background:#EDF5F0;color:#172B4D;border-radius:16px;padding:1rem 1.2rem;border-left:5px solid #D5A73C;margin:.5rem 0;}
+.tax-eyebrow {color:#087F8C;font-size:.95rem;font-weight:750;letter-spacing:.12em;text-transform:uppercase;margin:0 0 .35rem;}
+.tax-tagline {font-size:1.5rem !important;font-weight:650;line-height:1.4;margin:0 0 .5rem;}
+.tax-profile {font-size:1.05rem;background:#EDF5F0;color:#172B4D;border-radius:16px;padding:1rem 1.2rem;border-left:5px solid #D5A73C;margin:.5rem 0;}
 .tax-profile strong {display:block;margin-bottom:.3rem;}
 .tax-summary {background:#FFFFFF;color:#172B4D;border:1px solid #DCE5E4;border-top:4px solid var(--accent);border-radius:16px;padding:1rem 1.2rem;margin-bottom:1rem;}
-.tax-summary-label {font-size:1rem;font-weight:700;}
-.tax-summary-amount {font-size:clamp(1.5rem,4vw,2rem);font-weight:750;line-height:1.6;font-variant-numeric:tabular-nums;}
-.tax-summary-note {font-size:.8rem;color:#526078;}
+.tax-summary-label {font-size:1.1rem;font-weight:700;}
+.tax-summary-amount {font-size:clamp(1.8rem,4vw,2.2rem);font-weight:750;line-height:1.6;font-variant-numeric:tabular-nums;}
+.tax-summary-note {font-size:1rem;color:#526078;}
 .tax-tree {margin:1rem 0;}
 .tax-node {border:1px solid #DCE5E4;border-radius:12px;margin:.6rem 0;background:#FFFFFF;color:#172B4D;}
-.tax-node summary {display:flex;gap:.65rem;align-items:center;cursor:pointer;padding:1rem;font-weight:650;list-style:none;}
+.tax-node summary {font-size:1.05rem;display:flex;gap:.65rem;align-items:center;cursor:pointer;padding:1rem;font-weight:650;list-style:none;}
 .tax-node summary::-webkit-details-marker {display:none;}
 .tax-node summary::before {content:'+';font-size:1.3rem;font-weight:750;color:#087F8C;flex-shrink:0;}
 .tax-node[open]>summary::before {content:'-';}
 .tax-node summary:focus-visible {outline:3px solid #087F8C;outline-offset:2px;border-radius:10px;}
-.tax-node-amount {margin-left:auto;white-space:nowrap;font-size:.9rem;font-weight:700;font-variant-numeric:tabular-nums;}
+.tax-node-amount {margin-left:auto;white-space:nowrap;font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;}
 .tax-node-content {padding:0 1rem 1rem;}
 .tax-leaf {display:flex;gap:.75rem;padding:.75rem .25rem;border-bottom:1px solid #EDF1EF;}
 .tax-leaf>span:first-child {overflow-wrap:anywhere;}
-.tax-node-context,.tax-metric-context {font-size:.8rem;color:#526078;margin:.5rem 0;}
+.tax-node-context,.tax-metric-context {font-size:1rem;color:#526078;margin:.5rem 0;}
 @media(max-width:480px) {.tax-node summary,.tax-leaf {flex-wrap:wrap;}.tax-node-amount {margin-left:1.3rem;}}
 .tax-bar-row {margin:1rem 0 1.25rem;}
-.tax-bar-label {display:flex;align-items:baseline;justify-content:space-between;gap:1rem;font-size:1rem;color:#172B4D;}
+.tax-bar-label {display:flex;align-items:baseline;justify-content:space-between;gap:1rem;font-size:1.1rem;color:#172B4D;}
 .tax-bar-label span {min-width:0;overflow-wrap:anywhere;}
 .tax-bar-label strong {flex-shrink:0;font-variant-numeric:tabular-nums;}
 .tax-bar-track {height:14px;background:#E3EAE9;border-radius:7px;margin-top:.45rem;overflow:hidden;}
 .tax-bar-fill {height:100%;border-radius:7px;}
 @media(max-width:480px) {.tax-node summary>span:first-child {min-width:0;overflow-wrap:anywhere;}.tax-node-content {padding-left:.6rem;padding-right:.6rem;}.tax-bar-label {gap:.65rem;}}
+/* Keep native labels, tabs and explanatory text legible when projected. */
+[data-testid="stWidgetLabel"] p,
+[data-testid="stCaptionContainer"] p,
+[data-testid="stButton"] p,
+[data-baseweb="tab"] p {font-size:1rem !important;line-height:1.5;}
+.tax-leaf {font-size:1.05rem;}
+@media(max-width:640px) {
+    .tax-bar-label {flex-wrap:wrap;}
+    .tax-bar-label span {flex-basis:100%;}
+    .tax-bar-label strong {margin-left:auto;}
+    .tax-summary-label {overflow-wrap:anywhere;}
+    .tax-summary-amount {font-size:1.65rem;overflow-wrap:anywhere;}
+}
 </style>
 """, unsafe_allow_html=True)
 
