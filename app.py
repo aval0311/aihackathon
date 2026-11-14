@@ -2,6 +2,7 @@
 import csv
 import json
 import re
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 import streamlit as st
 
@@ -50,45 +51,123 @@ def load_city_budget():
     return sorted(spending, key=lambda row: row["Budget (USD)"], reverse=True), metadata
 
 
-def show_city_budget():
-    """Display city spending without inferring personal taxes from salary."""
+def allocate_tax_dollars(spending, annual_tax):
+    """Allocate a tax amount using spending shares and reconcile every cent."""
+    amount = Decimal(str(annual_tax))
+    if not amount.is_finite() or amount < 0:
+        raise ValueError("Tax contribution must be a nonnegative amount.")
+    cents = int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    total = sum(row["Budget (USD)"] for row in spending)
+    # Allocate whole cents first, then distribute leftover cents fairly.
+    parts = [divmod(cents * row["Budget (USD)"], total) for row in spending]
+    allocated = [part[0] for part in parts]
+    remainder_order = sorted(
+        range(len(parts)), key=lambda index: parts[index][1], reverse=True
+    )
+    for index in remainder_order[:cents - sum(allocated)]:
+        allocated[index] += 1
+    rows = [
+        {
+            "Category": row["Category"],
+            "Your tax allocation (USD)": value / 100,
+            "Share (%)": row["Share (%)"],
+        }
+        for row, value in zip(spending, allocated)
+    ]
+    return sorted(
+        rows,
+        key=lambda row: (row["Your tax allocation (USD)"], row["Share (%)"]),
+        reverse=True,
+    )
+
+
+def show_city_budget(annual_city_tax):
+    """Tell the citizen's tax story using the city's reviewed spending shares."""
     try:
         spending, metadata = load_city_budget()
     except (OSError, ValueError, KeyError, TypeError):
         st.error("City budget data could not be loaded or verified.")
         return
 
-    st.subheader("Draper General Fund")
+    st.subheader("Where your Draper city tax dollars could go")
     st.caption(
         f"FY {metadata['fiscal_year']} | August 2026 adoption snapshot | "
         "Budgeted amounts, including transfers"
     )
-    st.metric("General Fund budget", f"${metadata['published_total_usd']:,.0f}")
-    st.bar_chart(
-        spending,
-        x="Category",
-        y="Budget (USD)",
-        horizontal=True,
-        height=480,
-    )
-    st.dataframe(
-        spending,
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            "Budget (USD)": st.column_config.NumberColumn(format="$%d"),
-            "Share (%)": st.column_config.NumberColumn(format="%.2f%%"),
-        },
-    )
+    if annual_city_tax is None:
+        st.info(
+            "Enter your annual Draper city property tax amount in the form "
+            "above and submit again to see your dollar breakdown. Use only "
+            "the Draper City portion, not your entire property tax bill."
+        )
+    else:
+        allocations = allocate_tax_dollars(spending, annual_city_tax)
+        st.metric("City tax amount you entered", f"${annual_city_tax:,.2f}")
+        if annual_city_tax > 0:
+            top = allocations[0]
+            st.write(
+                f"Your largest illustrative allocation is **{top['Category']}**: "
+                f"**${top['Your tax allocation (USD)']:,.2f} per year** "
+                f"({top['Share (%)']:.2f}% of the amount you entered)."
+            )
+        else:
+            st.write("You entered zero city tax, so every allocation is zero.")
+        st.caption("Illustrative annual allocations, ordered largest to smallest.")
+        # Set the chart's category order explicitly so it matches the table.
+        st.vega_lite_chart(
+            allocations,
+            {
+                "mark": "bar",
+                "encoding": {
+                    "y": {
+                        "field": "Category", "type": "nominal",
+                        "sort": [row["Category"] for row in allocations],
+                        "axis": {"labelLimit": 220},
+                    },
+                    "x": {
+                        "field": "Your tax allocation (USD)",
+                        "type": "quantitative",
+                        "title": "Your illustrative allocation per year (USD)",
+                        "axis": {"format": "$,.2f"},
+                    },
+                    "tooltip": [
+                        {"field": "Category", "type": "nominal"},
+                        {"field": "Your tax allocation (USD)",
+                         "type": "quantitative", "format": "$,.2f"},
+                    ],
+                },
+            },
+            height=480,
+            use_container_width=True,
+        )
+        st.dataframe(
+            allocations,
+            hide_index=True,
+            use_container_width=True,
+            column_config={
+                "Your tax allocation (USD)": st.column_config.NumberColumn(
+                    format="$%.2f"
+                ),
+                "Share (%)": st.column_config.NumberColumn(format="%.2f%%"),
+            },
+        )
+        st.caption(
+            "Allocations add up to the city tax amount you entered. "
+            "Rounding is reconciled to the nearest cent."
+        )
     st.markdown(
         f"[Official budget presentation]({metadata['source_url']}) "
         f"- PDF page {metadata['source_pdf_page']}, FY2027 column."
     )
     st.info(
-        "These percentages show how Draper's General Fund budget is allocated. "
-        "They do not estimate your personal city taxes and do not change "
-        "with your salary or ZIP code."
+        "Illustrative allocation = your entered city tax amount multiplied by "
+        "each category's share of the General Fund budget. This assumes those "
+        "tax dollars follow the fund's overall spending mix; it is not an "
+        "exact trace of your payments. Other revenues also support this fund."
     )
+    with st.expander("View the underlying city budget"):
+        st.metric("General Fund budget", f"${metadata['published_total_usd']:,.0f}")
+        st.dataframe(spending, hide_index=True, use_container_width=True)
     with st.expander("About this city dataset"):
         for limitation in metadata["limitations"]:
             st.write(f"- {limitation}")
@@ -96,8 +175,8 @@ def show_city_budget():
 # Display the app introduction and development status.
 st.title("Your Tax Dollar")
 st.write(
-    "Understand your estimated taxes and the public services "
-    "government budgets support."
+    "See an illustrative dollar-by-dollar breakdown of the public services "
+    "your taxes support, from the largest allocation to the smallest."
 )
 st.info(
     "Draper's official city budget is connected. Tax calculations, "
@@ -133,6 +212,24 @@ with st.form("tax_inputs"):
         "wage income only, no dependents or additional credits."
     )
 
+    # Local property taxes cannot be derived from annual salary.
+    annual_city_tax = st.number_input(
+        "Annual property tax paid to Draper City ($), optional",
+        min_value=0.0,
+        value=None,
+        step=50.0,
+        format="%.2f",
+        help=(
+            "Enter only the Draper City general operating tax line from your "
+            "property tax bill. Exclude county, school, and special district "
+            "amounts. Leave blank if unknown."
+        ),
+    )
+    st.caption(
+        "City dollar allocations use this entered amount, not salary. "
+        "For a demonstration, you may enter 1000 as an example contribution."
+    )
+
     submitted = st.form_submit_button("Explore my tax picture")
 
 # Validate ZIP format before storing the submitted inputs.
@@ -145,6 +242,7 @@ if submitted:
         st.session_state["profile"] = {
             "salary": salary,
             "zip_code": zip_code.strip(),
+            "annual_city_tax": annual_city_tax,
         }
 
 # Keep valid results available during Streamlit page reruns.
@@ -164,23 +262,25 @@ if profile:
 
     # Reserve space for calculated taxes without inventing estimates.
     federal, state = st.columns(2)
-    federal.metric("Estimated federal income tax", "Pending")
-    state.metric("Estimated state income tax", "Pending")
+    federal.metric("Estimated federal income tax", "Not calculated")
+    state.metric("Estimated state income tax", "Not calculated")
+    st.caption("Federal and state calculators are not implemented; these are not loading indicators.")
 
     # Create one spending tab for each government level.
-    st.subheader("Explore public spending")
+    st.subheader("Where your tax dollars could go")
     levels = ["Federal", "State", "County", "City"]
     tabs = st.tabs(levels)
 
     for level, tab in zip(levels, tabs):
         with tab:
-            st.write(f"**{level} spending breakdown**")
+            st.write(f"**{level} tax dollar breakdown**")
             if level == "City":
-                show_city_budget()
+                show_city_budget(profile.get("annual_city_tax"))
             else:
                 st.info(
-                    "Awaiting reviewed budget data. Categories, charts, "
-                    "fiscal year, and source links will appear here."
+                    "This breakdown is not implemented yet. Once the tax "
+                    "amount and reviewed spending data are connected, "
+                    "your dollar allocations will appear largest to smallest."
                 )
 
             if level in ["County", "City"]:
@@ -205,7 +305,8 @@ with st.expander("Sources and assumptions"):
     )
     st.write(
         "Federal, state, and county sources and tax calculation rules "
-        "are pending. No personal tax estimate is calculated yet."
+        "are pending. The City tab allocates only the city tax amount "
+        "you enter, using General Fund spending shares."
     )
     st.write(
         "Spending allocations will be illustrative estimates, "
@@ -214,7 +315,7 @@ with st.expander("Sources and assumptions"):
 
 # Explain how this initial shell handles submitted inputs.
 st.caption(
-    "Educational prototype. Salary and ZIP are held in this app "
+    "Educational prototype. Inputs are held in this app "
     "session; this shell does not save them to a database or send "
     "them to an AI service."
 )
