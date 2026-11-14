@@ -1,5 +1,4 @@
-"""Two-input, four-level tax story for the Draper hackathon pilot."""
-import csv
+"""Two-input tax story for a married Salt Lake City household with one child."""
 import json
 import re
 from pathlib import Path
@@ -8,26 +7,12 @@ from tax_model import estimate_taxes, allocate_tax_dollars
 
 st.set_page_config(page_title="Your Tax Dollar", layout="centered")
 DATA_DIR = Path(__file__).resolve().parent / "data"
+PILOT_ZIPS = {"84101", "84102", "84103", "84104", "84105", "84106", "84108", "84111", "84112", "84116"}
 
 
 def load_snapshots():
     """Use reviewed local snapshots so the demo does not depend on live scraping."""
     snapshots = json.loads((DATA_DIR / "spending_snapshots.json").read_text(encoding="utf-8"))
-    city_meta = json.loads((DATA_DIR / "draper_general_fund_fy2027_metadata.json").read_text(encoding="utf-8"))
-    with (DATA_DIR / city_meta["dataset_file"]).open(encoding="utf-8", newline="") as handle:
-        city_rows = [{"category": row["category"], "weight": int(row["amount_usd"])} for row in csv.DictReader(handle)]
-    snapshots["City"] = {
-        "jurisdiction": "Draper City",
-        "period": "FY2026-27, August 2026 adoption snapshot",
-        "scope": "General Fund expenditure and transfers",
-        "source_url": city_meta["source_url"],
-        "source_location": "PDF page 12, FY2027 column",
-        "weight_unit": "USD",
-        "published_weight_total": city_meta["published_total_usd"],
-        "rounding_tolerance": 0,
-        "notes": "General Fund only, not all city funds. Later amendments are not incorporated. Transfers are counted once. Tax payments are illustrated using the overall fund spending mix, including spending supported by other revenues.",
-        "rows": city_rows,
-    }
     for snapshot in snapshots.values():
         rows = snapshot["rows"]
         total = sum(row["weight"] for row in rows)
@@ -44,7 +29,7 @@ def show_breakdown(level, snapshot, amount):
     label = "Hypothetical homeowner allocation" if local else "Illustrative income-tax allocation"
     st.subheader(f"{snapshot['jurisdiction']}: where the dollars could go")
     st.caption(f"{label} | {snapshot['period']}")
-    st.metric("Annual scenario tax" if local else "Estimated annual income tax", f"${amount:,.2f}")
+    st.metric("Annual household scenario tax" if local else "Estimated annual household income tax", f"${amount:,.2f}")
     allocations = allocate_tax_dollars(snapshot["rows"], amount)
     if amount > 0:
         top = allocations[0]
@@ -79,14 +64,14 @@ def show_breakdown(level, snapshot, amount):
 
 
 st.title("Your Tax Dollar")
-st.write("Enter your salary and ZIP to explore the public services your tax dollars could support, ranked from largest to smallest.")
-st.caption("Draper / Salt Lake County pilot | ZIP 84020 | Tax year 2026")
-st.info("Federal and state panels estimate income tax. City and county panels are hypothetical homeowner scenarios: a home worth 3 times salary, taxed at published local rates. They are not estimates of your actual property taxes.")
+st.write("Enter your personal salary and ZIP to explore the services your household's tax dollars could support, ranked from largest to smallest.")
+st.caption("Salt Lake City / Salt Lake County pilot | Married filing jointly, one dependent | Tax year 2026")
+st.info("Demo profile: two married adults under 65 and one qualifying child under 17. We model household income at about 2.06 times your personal salary, then a primary home worth about 4.22 times that household income. These ratios of citywide medians define a hypothetical scenario, not your spouse's actual earnings or your home's value.")
 
 with st.form("tax_inputs"):
-    salary = st.number_input("Annual gross salary ($)", min_value=0, max_value=10000000, value=None, placeholder="Enter your salary", step=1000)
+    salary = st.number_input("Your annual gross salary ($)", min_value=0, max_value=10000000, value=None, placeholder="Enter your salary", step=1000, help="Enter your individual salary, not combined household income. The prototype applies its disclosed household-income assumption automatically.")
     zip_code = st.text_input("Residential ZIP code", max_chars=5, placeholder="Enter your ZIP code")
-    st.caption("Assumes a single adult under 65, wage income only, standard deduction, no dependents or pre-tax deductions. Federal payroll taxes and most credits are excluded. This pilot uses a Salt Lake County scenario, not a precise ZIP-to-boundary lookup.")
+    st.caption("Only salary and ZIP are required. Assumes wage income, the joint standard deduction, one eligible child, and no pre-tax deductions. Payroll taxes, refundable credits and most other credits are excluded. ZIPs select the Salt Lake City pilot scenario; they do not verify a parcel's city boundary.")
     submitted = st.form_submit_button("Show where my tax dollars could go")
 
 if submitted:
@@ -95,8 +80,8 @@ if submitted:
         error = "Please enter your annual gross salary."
     elif not re.fullmatch(r"[0-9]{5}", zip_code.strip()):
         error = "Please enter a five-digit ZIP code."
-    elif zip_code.strip() != "84020":
-        error = "This hackathon pilot supports Draper ZIP 84020 only. Other locations are not implemented."
+    elif zip_code.strip() not in PILOT_ZIPS:
+        error = "This pilot uses selected Salt Lake City ZIPs, such as 84101, 84103 or 84111. Other locations are not implemented."
     if error:
         st.session_state.pop("profile", None)
         st.error(error)
@@ -104,14 +89,19 @@ if submitted:
         st.session_state["profile"] = {"salary": salary, "zip_code": zip_code.strip()}
 
 profile = st.session_state.get("profile")
+# Clear a submission from the previous pilot after the deployment changes.
+if profile and profile["zip_code"] not in PILOT_ZIPS:
+    st.session_state.pop("profile", None)
+    profile = None
 if profile:
     taxes = estimate_taxes(profile["salary"])
-    st.subheader("Your annual tax story")
-    st.write(f"Salary: **${profile['salary']:,.0f}** | ZIP: **{profile['zip_code']}**")
+    st.subheader("Your household's annual tax story")
+    st.write(f"Your salary: **${profile['salary']:,.0f}** | ZIP: **{profile['zip_code']}**")
+    st.write(f"Modeled household gross income: **${taxes['household_income']:,.2f}** (about 2.06 times your salary). All four panels describe this household scenario.")
     columns = st.columns(2)
     for index, level in enumerate(["Federal", "State", "County", "City"]):
-        columns[index % 2].metric(f"{level} homeowner scenario" if level in ("County", "City") else f"{level} income tax estimate", f"${taxes[level]:,.2f}")
-    st.warning(f"Local scenario only: assumes a primary residence worth ${taxes['assumed_home_value']:,.0f} (3 times salary), with 55% taxable value. This is a project assumption, not an inferred home value. Excludes library, school and special district levies, sales taxes, exemptions beyond the standard primary-residence exemption, and renter circumstances.")
+        columns[index % 2].metric(f"{level} household homeowner scenario" if level in ("County", "City") else f"{level} household income tax estimate", f"${taxes[level]:,.2f}")
+    st.warning(f"Local scenario only: primary home worth ${taxes['assumed_home_value']:,.0f}, about 4.22 times modeled household income or 8.68 times your entered salary, with 55% taxable value. City tax covers only the general operations levy. Separate library, school, district and other city levies, sales taxes, and additional exemptions are excluded.")
     try:
         snapshots = load_snapshots()
     except (OSError, ValueError, KeyError, TypeError):
@@ -123,12 +113,16 @@ if profile:
                 show_breakdown(level, snapshots[level], taxes[level])
 
 with st.expander("Tax rules, assumptions, and sources"):
-    st.write("Federal: 2026 single-filer progressive brackets and a $16,100 standard deduction. No additional credits, adjustments, other income, payroll taxes, or alternative minimum tax are modeled.")
+    st.write("Profile: married filing jointly, both adults under 65, with one qualifying child under 17 and required Social Security numbers. The child assumption is a demo choice, not a measured city average. Household income is modeled from the citizen's personal salary; it is not an estimate of actual spouse earnings.")
+    st.write("Federal: 2026 married-filing-jointly progressive brackets and a $32,200 standard deduction. Includes one nonrefundable child tax credit of up to $2,200, reduced by $50 per $1,000 (or part) of household income above $400,000. Tax is floored at zero. Refundable ACTC, EITC, other credits, payroll taxes and AMT are not modeled.")
     st.markdown("[IRS 2026 brackets and standard deduction](https://www.irs.gov/newsroom/working-families-tax-cuts-individuals-and-workers)")
-    st.write("Utah: assumes wages equal state taxable income; 4.45% rate, less the nonrefundable taxpayer tax credit: 6% of the $16,100 standard deduction, reduced by 1.3% of income above $18,696. Other state credits and exemptions are excluded.")
+    st.markdown("[IRS 2026 child and dependent credit calculation](https://www.irs.gov/pub/irs-prior/f1040s8--2026.pdf)")
+    st.write("Utah: assumes modeled household wages equal state taxable income; 4.45% rate, less the nonrefundable taxpayer tax credit: 6% times ($32,200 joint standard deduction + $2,167 for one dependent), reduced by 1.3% of household income above $37,392. Other credits and exemptions are excluded.")
     st.markdown("[Utah income-tax rate](https://le.utah.gov/xcode/Title59/Chapter10/C59-10-S104_2026050620260506.html) | [Utah taxpayer credit, 2026 review](https://le.utah.gov/interim/2026/pdf/00003360.pdf)")
-    st.write("Local: hypothetical home value = 3 times salary (a project assumption). Taxable home value = 55% of that value. City scenario = taxable value times 0.001128; countywide scenario = taxable value times 0.001509. The ZIP selects the fixed pilot; it does not establish parcel location or home ownership.")
-    st.markdown("[Draper adopted-budget presentation, page 4](https://www.utah.gov/pmn/files/1477201.pdf) | [Salt Lake County budget and tax example, printed pages 10-11](https://www.saltlakecounty.gov/globalassets/1-site-files/mayor-finance/budget/budget-documents/2026/supplemental/4.5---2026-adopted-budget-in-brief-12-9-2025.pdf?v=2)")
-    st.write("Tax rules are for 2026; spending snapshots span FY2025 federal actual outlays and FY2026/27 local/state budgets. Years and scopes are labeled in each panel. Transfers are not reallocated a second time. This is not a comprehensive tax bill or a tax-return calculation.")
+    st.write("Scenario multipliers use 2020-2024 ACS figures: median owner-occupied home value $539,500; median full-time worker earnings $62,180; median married-couple family income $127,972. Household-income multiplier = 127,972 / 62,180 = 2.05809. Home/household-income multiplier = 539,500 / 127,972 = 4.21577. Combined home/personal-salary multiplier = 8.67642. The ratios are not independent multipliers to apply twice to salary, nor are they a count of earners.")
+    st.markdown("[Census home-value data](https://www.census.gov/quickfacts/fact/table/saltlakecitycityutah/EDU635224) | [ACS earnings and married-family income figures reported by Neilsberg](https://www.neilsberg.com/insights/topic/salt-lake-city-ut/)")
+    st.write("Taxable home value is 55% of the scenario home value. City scenario uses the approved 2026 Salt Lake City general operations rate of 0.002374 only. County scenario uses the sum of approved countywide rates, 0.001349, excluding the separate library levy. Neither represents the complete property-tax bill.")
+    st.markdown("[Utah Tax Commission approved 2026 levy rates](https://tax.utah.gov/propertytax/rates/approved-rates/)")
+    st.write("Tax rules are for 2026. Federal spending uses FY2025 actual outlays; state uses FY2026-27 appropriations; city uses a verified FY2025-26 adopted snapshot; county uses a 2026 budget snapshot. Years and scopes are labeled in each panel. Transfers are not reallocated twice. This is not a comprehensive tax bill or a tax-return calculation.")
 
 st.caption("Educational prototype. Inputs stay in this app session; this code does not store them in a database or send them to an AI service.")
