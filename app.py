@@ -9,42 +9,50 @@ from spending_data import load_spending_data, build_allocations
 st.set_page_config(page_title="Your Tax Dollar", page_icon="🪙", layout="centered")
 PILOT_ZIPS = {"84101", "84102", "84103", "84104", "84105", "84106", "84108", "84111", "84112", "84116"}
 LEVEL_STYLE = {
-    "Federal": {"icon": "🏛️", "color": "#087F8C", "place": "United States"},
-    "State": {"icon": "🏔️", "color": "#6554A4", "place": "Utah"},
-    "County": {"icon": "🌳", "color": "#33744A", "place": "Salt Lake County"},
-    "City": {"icon": "🏙️", "color": "#A76512", "place": "Salt Lake City"},
+    "Federal": {"icon": "🏛️", "place": "United States"},
+    "State": {"icon": "🏔️", "place": "Utah"},
+    "County": {"icon": "🌳", "place": "Salt Lake County"},
+    "City": {"icon": "🏙️", "place": "Salt Lake City"},
 }
 
-# Scope decorative CSS to our own cards; native controls use the theme above.
+# Scope decorative CSS to our own cards; native controls use .streamlit/config.toml.
 st.markdown("""
 <style>
-.tax-eyebrow {color:#087F8C;font-size:.95rem;font-weight:750;letter-spacing:.12em;text-transform:uppercase;margin:0 0 .35rem;}
+:root {
+    --tax-lake: #165C82;
+    --tax-navy: #17324D;
+    --tax-ice: #E8F3F8;
+    --tax-white: #FFFFFF;
+    --tax-muted: #455D70;
+    --tax-border: #C9DCE6;
+}
+.tax-eyebrow {color:var(--tax-lake);font-size:.95rem;font-weight:750;letter-spacing:.12em;text-transform:uppercase;margin:0 0 .35rem;}
 .tax-tagline {font-size:1.5rem !important;font-weight:650;line-height:1.4;margin:0 0 .5rem;}
-.tax-profile {font-size:1.05rem;background:#EDF5F0;color:#172B4D;border-radius:16px;padding:1rem 1.2rem;border-left:5px solid #D5A73C;margin:.5rem 0;}
+.tax-profile {font-size:1.05rem;background:var(--tax-ice);color:var(--tax-navy);border-radius:16px;padding:1rem 1.2rem;border-left:5px solid var(--tax-lake);margin:.5rem 0;}
 .tax-profile strong {display:block;margin-bottom:.3rem;}
-.tax-summary {background:#FFFFFF;color:#172B4D;border:1px solid #DCE5E4;border-top:4px solid var(--accent);border-radius:16px;padding:1rem 1.2rem;margin-bottom:1rem;}
+.tax-summary {background:var(--tax-white);color:var(--tax-navy);border:1px solid var(--tax-border);border-top:4px solid var(--tax-lake);border-radius:16px;padding:1rem 1.2rem;margin-bottom:1rem;}
 .tax-summary-label {font-size:1.1rem;font-weight:700;}
 .tax-summary-amount {font-size:clamp(1.8rem,4vw,2.2rem);font-weight:750;line-height:1.6;font-variant-numeric:tabular-nums;}
-.tax-summary-note {font-size:1rem;color:#526078;}
+.tax-summary-note {font-size:1rem;color:var(--tax-muted);}
 .tax-tree {margin:1rem 0;}
-.tax-node {border:1px solid #DCE5E4;border-radius:12px;margin:.6rem 0;background:#FFFFFF;color:#172B4D;}
+.tax-node {border:1px solid var(--tax-border);border-radius:12px;margin:.6rem 0;background:var(--tax-white);color:var(--tax-navy);}
 .tax-node summary {font-size:1.05rem;display:flex;gap:.65rem;align-items:center;cursor:pointer;padding:1rem;font-weight:650;list-style:none;}
 .tax-node summary::-webkit-details-marker {display:none;}
-.tax-node summary::before {content:'+';font-size:1.3rem;font-weight:750;color:#087F8C;flex-shrink:0;}
+.tax-node summary::before {content:'+';font-size:1.3rem;font-weight:750;color:var(--tax-lake);flex-shrink:0;}
 .tax-node[open]>summary::before {content:'-';}
-.tax-node summary:focus-visible {outline:3px solid #087F8C;outline-offset:2px;border-radius:10px;}
+.tax-node summary:focus-visible {outline:3px solid var(--tax-lake);outline-offset:2px;border-radius:10px;}
 .tax-node-amount {margin-left:auto;white-space:nowrap;font-size:1.05rem;font-weight:700;font-variant-numeric:tabular-nums;}
 .tax-node-content {padding:0 1rem 1rem;}
-.tax-leaf {display:flex;gap:.75rem;padding:.75rem .25rem;border-bottom:1px solid #EDF1EF;}
+.tax-leaf {display:flex;gap:.75rem;padding:.75rem .25rem;border-bottom:1px solid var(--tax-border);}
 .tax-leaf>span:first-child {overflow-wrap:anywhere;}
-.tax-node-context,.tax-metric-context {font-size:1rem;color:#526078;margin:.5rem 0;}
+.tax-node-context,.tax-metric-context {font-size:1rem;color:var(--tax-muted);margin:.5rem 0;}
 @media(max-width:480px) {.tax-node summary,.tax-leaf {flex-wrap:wrap;}.tax-node-amount {margin-left:1.3rem;}}
 .tax-bar-row {margin:1rem 0 1.25rem;}
-.tax-bar-label {display:flex;align-items:baseline;justify-content:space-between;gap:1rem;font-size:1.1rem;color:#172B4D;}
+.tax-bar-label {display:flex;align-items:baseline;justify-content:space-between;gap:1rem;font-size:1.1rem;color:var(--tax-navy);}
 .tax-bar-label span {min-width:0;overflow-wrap:anywhere;}
 .tax-bar-label strong {flex-shrink:0;font-variant-numeric:tabular-nums;}
-.tax-bar-track {height:14px;background:#E3EAE9;border-radius:7px;margin-top:.45rem;overflow:hidden;}
-.tax-bar-fill {height:100%;border-radius:7px;}
+.tax-bar-track {height:14px;background:var(--tax-ice);border-radius:7px;margin-top:.45rem;overflow:hidden;}
+.tax-bar-fill {background:var(--tax-lake);height:100%;border-radius:7px;}
 @media(max-width:480px) {.tax-node summary>span:first-child {min-width:0;overflow-wrap:anywhere;}.tax-node-content {padding-left:.6rem;padding-right:.6rem;}.tax-bar-label {gap:.65rem;}}
 /* Keep native labels, tabs and explanatory text legible when projected. */
 [data-testid="stWidgetLabel"] p,
@@ -63,7 +71,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-def render_allocation_chart(allocations, color):
+def render_allocation_chart(allocations):
     """Responsive bars keep full category names and exact dollars above each bar."""
     largest = max(row["Your allocation (USD)"] for row in allocations)
     html = '<div class="tax-bars" role="list" aria-label="Annual allocations, largest to smallest">'
@@ -74,7 +82,7 @@ def render_allocation_chart(allocations, color):
         html += (f'<div class="tax-bar-row" role="listitem"><div class="tax-bar-label">'
                  f'<span>{name}</span><strong>${amount:,.2f}</strong></div>'
                  f'<div class="tax-bar-track" aria-hidden="true"><div class="tax-bar-fill" '
-                 f'style="width:{width:.6f}%;background:{color}"></div></div></div>')
+                 f'style="width:{width:.6f}%"></div></div></div>')
     return html + '</div>'
 
 def parse_salary_entry(value):
@@ -169,7 +177,7 @@ def show_breakdown(level, pool, amount):
             st.write("Your estimated tax is $0 at this level. Each allocation below is $0.")
     st.markdown("#### Follow your dollars")
     st.caption("Largest to smallest. Dollar amounts are annual estimates.")
-    st.markdown(render_allocation_chart(allocations, style["color"]), unsafe_allow_html=True)
+    st.markdown(render_allocation_chart(allocations), unsafe_allow_html=True)
     st.markdown("#### Explore the categories")
     st.caption("Select + to see named subcategories. Select + again where more detail is available. Subcategories are parts of their parent amount, not additional taxes.")
     st.markdown(render_allocation_details(pool, allocations, amounts, groups), unsafe_allow_html=True)
@@ -272,7 +280,7 @@ if st.session_state.get("view", "inputs") == "results" and profile:
         style = LEVEL_STYLE[level]
         note = "Property-tax scenario / year" if level in ("County", "City") else "Estimated income tax / year"
         columns[index % 2].markdown(
-            f'<div class="tax-summary" style="--accent:{style["color"]}">'
+            '<div class="tax-summary">'
             f'<div class="tax-summary-label">{style["icon"]} {level} · {style["place"]}</div>'
             f'<div class="tax-summary-amount">${taxes[level]:,.2f}</div>'
             f'<div class="tax-summary-note">{note}</div></div>', unsafe_allow_html=True,
