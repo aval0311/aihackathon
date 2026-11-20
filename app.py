@@ -187,7 +187,7 @@ def show_breakdown(level, pool, amount):
                                     "Share (%)": st.column_config.NumberColumn(format="%.2f%%")})
         st.caption("Broad categories add up to your displayed tax estimate. Each expanded spending branch adds up to its parent, including rounding.")
     with st.expander("Dataset, sources and allocation assumptions"):
-        st.markdown("[View the allocation CSV](https://github.com/aval0311/aihackathon/blob/main/data/tax-explorer/tax_explorer_prototype_v3_reconciled.csv)")
+        st.markdown("[View the allocation CSV](https://github.com/aval0311/your-tax-dollar/blob/main/data/tax-explorer/tax_explorer_prototype_v3_reconciled.csv)")
         st.write("Your individual tax estimate is distributed using this CSV's normalized spending shares. Broad purposes group the first-level records by citizen category. Shared costs and interest retain the CSV's attribution method. These figures illustrate spending patterns; they do not track actual payments or personal benefits.")
         st.write(root["notes"])
         if level == "County":
