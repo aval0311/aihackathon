@@ -4,7 +4,7 @@
 
 Your Tax Dollar is a public Streamlit prototype that helps Salt Lake City residents explore where their estimated tax dollars are allocated. Enter an **individual annual gross salary** and a **ZIP code** to see federal, state, county, and city spending illustrations, ranked from largest to smallest.
 
-**[Open the live app](https://your-tax-dollar.streamlit.app/)** | **[Public repository](https://github.com/aval0311/aihackathon)**
+**[Open the live app](https://your-tax-dollar.streamlit.app/)** | **[Public repository](https://github.com/aval0311/your-tax-dollar)**
 
 ## Presentation
 
@@ -77,8 +77,8 @@ The CSV preserves source URLs, page references, official amounts, attributed amo
 Use a Python environment compatible with the Streamlit version installed from `requirements.txt`.
 
 ```bash
-git clone https://github.com/aval0311/aihackathon.git
-cd aihackathon
+git clone https://github.com/aval0311/your-tax-dollar.git
+cd your-tax-dollar
 python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
